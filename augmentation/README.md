@@ -6,3 +6,6 @@ docker run --rm -ti --gpus '"device=0"' --ipc=host --name entity_container --net
 This code is parallelized in order to save time. To set the number of processors you can set `-processors=2`.
 
 ## Topic Modelling
+
+
+**Please, note that these files will overvwrite the actual content of the mes and pubmed datasets folder as entities and topics files are already present together with the related edges. If you plan to change configurations or code, make sure to save a snapshot of your data before running these scripts.**
