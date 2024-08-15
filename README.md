@@ -7,3 +7,5 @@ MES and PubMed datasets are anonymous and available on [Figshare](https://figsha
 - The folder [preprocessing](preprocessing/) contains the scripts to preprocess data and make these files ready for the augmentation, sampling and aggregation phases. Please, note that the files available on Figshare are already processed.
 - The folder [augmentation](augmentation/) contains the scripts to perform entity linking and topic modelling and to analyze the data.
 - The folder [split](split/) contains the scripts needed to partition data into training, validation and test (transductive, inductive, semi-inductive) sets.
+- The folder [baselines](baselines/) contains the implementation of the baselines (HAN, HGT, SAGE, GAT, ST-T)
+- The folder [model](model/) contains the implementation of SAN comprising the sampling implemented via random walk, and aggregation implemented with multihead attention.
