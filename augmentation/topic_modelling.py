@@ -39,9 +39,9 @@ def create_embdeddings(dataset):
     if not os.path.exists(path_embedding):
         os.makedirs(path_embedding)
 
-    publications = pd.read_csv(f'./datasets/{dataset}/all/final/publications.csv')
+    publications = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/publications.csv')
 
-    datasets = pd.read_csv(f'./datasets/{dataset}/all/final/datasets.csv',low_memory=False)
+    datasets = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/datasets.csv',low_memory=False)
 
     publications = publications['content'].tolist()
     datasets = datasets['content'].tolist()
@@ -60,9 +60,9 @@ def get_embeddings(dataset):
     if not os.path.exists(path_embedding):
         os.makedirs(path_embedding)
 
-    publications = pd.read_csv(f'./datasets/{dataset}/all/final/publications.csv')
+    publications = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/publications.csv')
 
-    datasets = pd.read_csv(f'./datasets/{dataset}/all/final/datasets.csv',low_memory=False)
+    datasets = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/datasets.csv',low_memory=False)
     publications_ids = publications['id'].tolist()
     datasets_ids = datasets['id'].tolist()
     docs_ids = publications_ids + datasets_ids
@@ -93,11 +93,11 @@ def find_topics(dataset,repr_model = None,cluster_size=3):
     hdbscan_model = HDBSCAN(min_cluster_size=cluster_size, metric='euclidean', cluster_selection_method='eom', prediction_data=True)
     vectorizer_model = CountVectorizer(stop_words="english",ngram_range=(1,2))
 
-    if not os.path.exists(f'./topic_modelling/models_{str(cluster_size)}/'):
-        os.makedirs(f'./topic_modelling/models_{str(cluster_size)}/')
-        os.makedirs(f'./topic_modelling/models_{str(cluster_size)}/analyses')
+    if not os.path.exists(f'./agumentation/topic_modelling/models_{str(cluster_size)}/'):
+        os.makedirs(f'./agumentation/topic_modelling/models_{str(cluster_size)}/')
+        os.makedirs(f'./agumentation/topic_modelling/models_{str(cluster_size)}/analyses')
 
-    path = f'./topic_modelling/models_{str(cluster_size)}/{dataset}_{str(repr_model).lower()}.json'
+    path = f'./agumentation/topic_modelling/models_{str(cluster_size)}/{dataset}_{str(repr_model).lower()}.json'
 
     # fine tune
     if repr_model == 'keybert':
@@ -109,7 +109,7 @@ def find_topics(dataset,repr_model = None,cluster_size=3):
     else:
         representation_model =None
 
-    model_path = f'./topic_modelling/models_{str(cluster_size)}/{dataset}_model_{str(repr_model).lower()}.pickle'
+    model_path = f'./agumentation/topic_modelling/models_{str(cluster_size)}/{dataset}_model_{str(repr_model).lower()}.pickle'
 
     # if not  os.path.exists(model_path):
     if repr_model == 'keybert':
@@ -141,9 +141,9 @@ def save_topics_json(dataset,repr_model,cluster_size=3):
     # st = LancasterStemmer()
     # lemma_tags = {"NNS", "NNPS"}
 
-    model_path = f'./topic_modelling/models_{str(cluster_size)}/{dataset}_model_{str(repr_model).lower()}.pickle'
-    path = f'./topic_modelling/models_{str(cluster_size)}/analyses/{dataset}_{str(repr_model).lower()}.json'
-    path_reduced = f'./topic_modelling/models_{str(cluster_size)}/analyses/{dataset}_{str(repr_model).lower()}_reduced.json'
+    model_path = f'./agumentation/topic_modelling/models_{str(cluster_size)}/{dataset}_model_{str(repr_model).lower()}.pickle'
+    path = f'./agumentation/topic_modelling/models_{str(cluster_size)}/analyses/{dataset}_{str(repr_model).lower()}.json'
+    path_reduced = f'./agumentation/topic_modelling/models_{str(cluster_size)}/analyses/{dataset}_{str(repr_model).lower()}_reduced.json'
 
     topic_model = BERTopic.load(model_path)
     topics = topic_model.get_topics()
@@ -183,10 +183,10 @@ def get_topic_info(dataset,repr_model,save=False,cluster_size=3):
         f = open(f'topic_info_{dataset}_{repr_model}.txt', 'w')
         sys.stdout = f
 
-    model_path = f'./topic_modelling/models_{cluster_size}/{dataset}_model_{str(repr_model).lower()}.pickle'
-    path_csv = f'./topic_modelling/models_{cluster_size}/analyses/documents_{dataset}_{str(repr_model).lower()}_documents.csv'
-    path_csv_t = f'./topic_modelling/models_{cluster_size}/analyses/documents_{dataset}_{str(repr_model).lower()}_topics.csv'
-    path_reduced = f'./topic_modelling/models_{cluster_size}/analyses/{dataset}_{str(repr_model).lower()}_reduced.json'
+    model_path = f'./agumentation/topic_modelling/models_{cluster_size}/{dataset}_model_{str(repr_model).lower()}.pickle'
+    path_csv = f'./agumentation/topic_modelling/models_{cluster_size}/analyses/documents_{dataset}_{str(repr_model).lower()}_documents.csv'
+    path_csv_t = f'./agumentation/topic_modelling/models_{cluster_size}/analyses/documents_{dataset}_{str(repr_model).lower()}_topics.csv'
+    path_reduced = f'./agumentation/topic_modelling/models_{cluster_size}/analyses/{dataset}_{str(repr_model).lower()}_reduced.json'
     data = json.load(open(path_reduced, 'r'))
     # count shared topics
     all_keys = []
@@ -279,14 +279,14 @@ def create_topic_nodes(dataset,repr_model,cluster_size):
 
     """This method creates for each topic keyword a new node each node has id, keyword and topic_id attributes (keyword) and for each topic a node has id, description (with keywords) and topic_id attributes (attributed)"""
 
-    path_reduced = f'./topic_modelling/models_{cluster_size}/analyses/{dataset}_{str(repr_model).lower()}_reduced.json'
-    path_keyword = f'./datasets/{dataset}/all/final/topics_keywords_{str(cluster_size)}.csv'
-    path_keyword_full = f'./datasets/{dataset}/all/final/topics_keywords_full_{str(cluster_size)}.csv'
-    path_attributed = f'./datasets/{dataset}/all/final/topics_attributed_{str(cluster_size)}.csv'
-    path_pubtopic_keyword = f'./datasets/{dataset}/all/final/pubtopicedges_keywords_{str(cluster_size)}.csv'
-    path_pubtopic_attributed = f'./datasets/{dataset}/all/final/pubtopicedges_attributed_{str(cluster_size)}.csv'
-    path_datatopic_keyword = f'./datasets/{dataset}/all/final/datatopicedges_keywords_{str(cluster_size)}.csv'
-    path_datatopic_attributed = f'./datasets/{dataset}/all/final/datatopicedges_attributed_{str(cluster_size)}.csv'
+    path_reduced = f'./agumentation/topic_modelling/models_{cluster_size}/analyses/{dataset}_{str(repr_model).lower()}_reduced.json'
+    path_keyword = f'./datasets/{dataset}/split_transductive/train/topics_keywords_{str(cluster_size)}.csv'
+    path_keyword_full = f'./datasets/{dataset}/split_transductive/train/topics_keywords_full_{str(cluster_size)}.csv'
+    path_attributed = f'./datasets/{dataset}/split_transductive/train/topics_attributed_{str(cluster_size)}.csv'
+    path_pubtopic_keyword = f'./datasets/{dataset}/split_transductive/train/pubtopicedges_keywords_{str(cluster_size)}.csv'
+    path_pubtopic_attributed = f'./datasets/{dataset}/split_transductive/train/pubtopicedges_attributed_{str(cluster_size)}.csv'
+    path_datatopic_keyword = f'./datasets/{dataset}/split_transductive/train/datatopicedges_keywords_{str(cluster_size)}.csv'
+    path_datatopic_attributed = f'./datasets/{dataset}/split_transductive/train/datatopicedges_attributed_{str(cluster_size)}.csv'
 
     docs,docs_ids,publications_ids,datasets_ids,embeddings = get_embeddings(dataset=dataset)
 
@@ -334,7 +334,7 @@ def create_topic_nodes(dataset,repr_model,cluster_size):
     df_attributed['id'] = topic_ids
     df_attributed['description'] = descs
 
-    path_csv = f'./topic_modelling/models_{cluster_size}/analyses/documents_{dataset}_{str(repr_model).lower()}_documents.csv'
+    path_csv = f'./agumentation/topic_modelling/models_{cluster_size}/analyses/documents_{dataset}_{str(repr_model).lower()}_documents.csv'
     df_docs = pd.read_csv(path_csv)
     df_docs['id'] = docs_ids
     df_docs = df_docs[df_docs['Topic'].isin(tids)]
@@ -377,47 +377,47 @@ def create_edges_with_authors_venues(dataset, attr='attributed'):
 
     """This method creates edges files: from authors to topics, from venues to topics"""
 
-    df_rels_pubs = pd.read_csv(f'./topic_modelling/topics/{dataset}/pubtopicedges_{attr}.csv')
-    df_rels_data = pd.read_csv(f'./topic_modelling/topics/{dataset}/datatopicedges_{attr}.csv')
+    df_rels_pubs = pd.read_csv(f'./agumentation/topic_modelling/topics/{dataset}/pubtopicedges_{attr}.csv')
+    df_rels_data = pd.read_csv(f'./agumentation/topic_modelling/topics/{dataset}/datatopicedges_{attr}.csv')
 
-    topics = pd.read_csv(f'./topic_modelling/topics/{dataset}/topics_{attr}.csv')
-    pubauthedges = pd.read_csv(f'./datasets/{dataset}/all/final/pubauthedges.csv')
-    dataauthedges = pd.read_csv(f'./datasets/{dataset}/all/final/dataauthedges.csv')
-    publications = pd.read_csv(f'./datasets/{dataset}/all/final/publications.csv')['id'].unique().tolist()
+    topics = pd.read_csv(f'./agumentation/topic_modelling/topics/{dataset}/topics_{attr}.csv')
+    pubauthedges = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/pubauthedges.csv')
+    dataauthedges = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/dataauthedges.csv')
+    publications = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/publications.csv')['id'].unique().tolist()
 
     if 'mes' == dataset:
-        publications = pd.read_csv(f'./datasets/{dataset}/all/final/publications.csv')['id'].unique().tolist()
+        publications = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/publications.csv')['id'].unique().tolist()
 
-    datasets = pd.read_csv(f'./datasets/{dataset}/all/final/datasets.csv')['id'].unique().tolist()
+    datasets = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/datasets.csv')['id'].unique().tolist()
     df_rels_pubs = df_rels_pubs[df_rels_pubs['source'].isin(publications)]
     df_rels_data = df_rels_data[df_rels_data['source'].isin(datasets)]
 
-    df_rels_pubs.drop_duplicates().to_csv(f'./datasets/{dataset}/all/final/pubtopicedges_{attr}.csv', index=False)
-    df_rels_data.drop_duplicates().to_csv(f'./datasets/{dataset}/all/final/datatopicedges_{attr}.csv', index=False)
-    topics.drop_duplicates().to_csv(f'./datasets/{dataset}/all/final/topics_{attr}.csv', index=False)
+    df_rels_pubs.drop_duplicates().to_csv(f'./datasets/{dataset}/split_transductive/train/pubtopicedges_{attr}.csv', index=False)
+    df_rels_data.drop_duplicates().to_csv(f'./datasets/{dataset}/split_transductive/train/datatopicedges_{attr}.csv', index=False)
+    topics.drop_duplicates().to_csv(f'./datasets/{dataset}/split_transductive/train/topics_{attr}.csv', index=False)
 
 
     df_rels_pubs.rename(columns={'target': 'target1', 'source': 'source1'}, inplace=True)
     df_rels_data.rename(columns={'target': 'target1', 'source': 'source1'}, inplace=True)
 
     if dataset != 'mes':
-        pubvenedges = pd.read_csv(f'./datasets/{dataset}/all/final/pubvenuesedges.csv')
+        pubvenedges = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/pubvenuesedges.csv')
         pubvenueentedges = pd.merge(pubvenedges, df_rels_pubs, left_on='source', right_on='source1', how='outer')
         pubvenueentedges = pubvenueentedges[['target', 'target1']]
         pubvenueentedges.rename(columns={'target': 'source', 'target1': 'target'}, inplace=True)
 
-        # pubvenueentedges.to_csv(f'./topic_modelling/topics/{dataset}/venuestopicsedges_{attr}.csv', index=False)
-        pubvenueentedges.to_csv(f'./datasets/{dataset}/all/final/venuestopicsedges_{attr}.csv', index=False)
+        # pubvenueentedges.to_csv(f'./agumentation/topic_modelling/topics/{dataset}/venuestopicsedges_{attr}.csv', index=False)
+        pubvenueentedges.to_csv(f'./datasets/{dataset}/split_transductive/train/venuestopicsedges_{attr}.csv', index=False)
         print(pubvenueentedges.shape)
 
     print(f'inner1 pub author {attr}')
     st = time.time()
-    # f'./datasets/{dataset}/all/final/
+    # f'./datasets/{dataset}/split_transductive/train/
     pubauthedgesentities = pd.merge(pubauthedges, df_rels_pubs, left_on='source', right_on='source1', how='outer')
     pubauthedgesentities = pubauthedgesentities[['target', 'target1']]
     pubauthedgesentities.rename(columns={'target': 'source', 'target1': 'target'}, inplace=True)
-    # pubauthedgesentities.to_csv(f'./topic_modelling/topics/{dataset}/pubauthtopicsedges_{attr}.csv', index=False)
-    pubauthedgesentities.to_csv(f'./datasets/{dataset}/all/final/pubauthtopicsedges_{attr}.csv', index=False)
+    # pubauthedgesentities.to_csv(f'./agumentation/topic_modelling/topics/{dataset}/pubauthtopicsedges_{attr}.csv', index=False)
+    pubauthedgesentities.to_csv(f'./datasets/{dataset}/split_transductive/train/pubauthtopicsedges_{attr}.csv', index=False)
     print(str(time.time() - st))
     print(pubauthedgesentities.shape)
     print(f'inner2 data author {attr}')
@@ -425,8 +425,8 @@ def create_edges_with_authors_venues(dataset, attr='attributed'):
     dataauthedgesentities = pd.merge(dataauthedges, df_rels_data, left_on='source', right_on='source1', how='outer')
     dataauthedgesentities = dataauthedgesentities[['target', 'target1']]
     dataauthedgesentities.rename(columns={'target': 'source', 'target1': 'target'}, inplace=True)
-    # dataauthedgesentities.to_csv(f'./topic_modelling/topics/{dataset}/dataauthtopicsedges_{attr}.csv', index=False)
-    dataauthedgesentities.to_csv(f'./datasets/{dataset}/all/final/dataauthtopicsedges_{attr}.csv', index=False)
+    # dataauthedgesentities.to_csv(f'./agumentation/topic_modelling/topics/{dataset}/dataauthtopicsedges_{attr}.csv', index=False)
+    dataauthedgesentities.to_csv(f'./datasets/{dataset}/split_transductive/train/dataauthtopicsedges_{attr}.csv', index=False)
     print(str(time.time() - st))
     print(dataauthedgesentities.shape)
 
@@ -473,8 +473,8 @@ if __name__ == '__main__':
     cluster_size = args.cluster_size
     print(f'cluster_size {cluster_size}')
     get_topic_info(dataset,repr_model,save,cluster_size)
-    path_datatopic_attributed = f'./datasets/{dataset}/all/final/datatopicedges_attributed_{str(cluster_size)}.csv'
-    path_pubatopic_attributed = f'./datasets/{dataset}/all/final/pubtopicedges_attributed_{str(cluster_size)}.csv'
+    path_datatopic_attributed = f'./datasets/{dataset}/split_transductive/train/datatopicedges_attributed_{str(cluster_size)}.csv'
+    path_pubatopic_attributed = f'./datasets/{dataset}/split_transductive/train/pubtopicedges_attributed_{str(cluster_size)}.csv'
     pubto = pd.read_csv(path_pubatopic_attributed)
     datato = pd.read_csv(path_datatopic_attributed)
     print(f'publication-topic edges: {pubto.shape[0]}')
