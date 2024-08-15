@@ -1,1 +1,1 @@
-Add the content of mes dataset here. MES dataset is the one downloaded from figshare and contains the set of csv files and the `processed` folder.
+Add the content of PubMed dataset here. PubMed dataset is the one downloaded and unzipped from figshare and contains the set of csv files and the `processed` folder.
