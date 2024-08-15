@@ -26,7 +26,21 @@ docker build -t san_image:latest .
 This command will create an image installing all the necessary packages and dependencies mentioned in the Dockerfile and requirements.txt.
 Please, note that GPUs are needed.
 
+Then, create a network `db_net` (you can choose the name you prefer). This is needed to properly run entity extraction, if you think you are not going to run augmentation, you can avoid this step.
+```
+docker network create db_net
+```
 
+## Run the experiments
+Belowr, the correct order of phases needed to reproduce the experiments. The instructions of each phase can be found in the corresponding folder.
+
+__Step 0: Data preprocessing__: In this step the scholarly knowledge graphs are preprocessed and prepared to the next phases. This step is not needed as data are already processed.
+__Step 1: Augmentation__: In this step entities and topics are extracted. The instructions can be found in `augmentation` folder. 
+__Step 2: Split__: In this step we partition the data in training, validation, test sets. The instructions can be found in `split` folder.
+__Step 3: Run__: Once that the three sets are available, it is possible to run the experiments. Instructions can be found inside the `model` folder.
+
+### Attention
+Please, note that the datasets provided on figshare contain all the data needed to run the experiments. Hence, it is possible to start from the **third** step, which consists in training SAN and evaluate its performances.
 
 
 
