@@ -19,42 +19,14 @@ nlp.add_pipe('dbpedia_spotlight', config={'dbpedia_rest_endpoint': 'http://10.14
                                           'process': 'annotate'})
 
 
-# url = 'http://10.14.129.2:80/rest/annotate'
-# payload = {
-#     'text': "President Obama called Wednesday on Congress to extend a tax break for students included in last year's economic stimulus package, arguing that the policy provides more generous assistance.",
-#     'confidence': '0.35'
-# }
-# headers = {
-#     'Accept': 'text/turtle'
-# }
-#
-# response = requests.post(url, data=payload, headers=headers)
-#
-# print(response.text)
-
-# nlp = spacy.load('en_core_web_sm')
-# # Use your endpoint: don't put any trailing slashes, and don't include the /annotate path
-# nlp.add_pipe('dbpedia_spotlight', config={'dbpedia_rest_endpoint': 'http://10.14.129.2:80/rest','confidence': 0.1,'process': 'annotate'})
-# doc = nlp('Google LLC is an American multinational technology company.')
-# print([(ent.text, ent.kb_id_, ent._.dbpedia_raw_result['@similarityScore']) for ent in doc.ents])
-
-
-# nlp = spacy.blank('en')
-# nlp.add_pipe('dbpedia_spotlight')
-
-# doc = nlp('Google LLC is an American multinational technology company.')
-# print([(ent.text, ent.kb_id_, ent._.dbpedia_raw_result['@similarityScore']) for ent in doc.ents])
-
 def load_docs(dataset):
     print(dataset)
 
 
     # if dataset != 'mes':
-    publications = pd.read_csv(f'./datasets/{dataset}/all/final/publications.csv')
-    # else:
-    #     publications = pd.read_csv(f'./datasets/{dataset}/all/final/publications_filtered.csv')
+    publications = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/publications.csv')
 
-    datasets = pd.read_csv(f'./datasets/{dataset}/all/final/datasets.csv',low_memory=False)
+    datasets = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/datasets.csv',low_memory=False)
 
     publications_d = publications['content'].tolist()
     datasets_d = datasets['content'].tolist()
@@ -123,9 +95,9 @@ def save_entities(dataset,processors=25):
     print('\n\n')
 
  
-    publications = pd.read_csv(f'./datasets/{dataset}/all/final/publications.csv')['id'].unique().tolist()
+    publications = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/publications.csv')['id'].unique().tolist()
 
-    datasets = pd.read_csv(f'./datasets/{dataset}/all/final/datasets.csv',low_memory=False)['id'].unique().tolist()
+    datasets = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/datasets.csv',low_memory=False)['id'].unique().tolist()
 
 
     # all_entities = [entity for sublist in all_entities for entity in sublist]
@@ -215,47 +187,47 @@ def save_entities(dataset,processors=25):
 
     # df_tmp.to_csv(f'./topic_modelling/entities/{dataset}/entities_tmp.csv',index=False)
     df = df[df['id'].isin(df_all_count_g1) & ~df['id'].isin(df_all_count_per)]
-    df.to_csv(f'./datasets/{dataset}/all/final/entities.csv',index=False)
+    df.to_csv(f'./datasets/{dataset}/split_transductive/train/entities.csv',index=False)
     print(df.shape[0])
     df_rels_pubs = df_rels_pubs[df_rels_pubs['target'].isin(df_all_count_g1)  & ~df_rels_pubs['target'].isin(df_all_count_per)].drop_duplicates()
-    df_rels_pubs.to_csv(f'./datasets/{dataset}/all/final/pubentedges.csv',index=False)
+    df_rels_pubs.to_csv(f'./datasets/{dataset}/split_transductive/train/pubentedges.csv',index=False)
     print(df_rels_pubs.shape[0])
 
     df_rels_data = df_rels_data[df_rels_data['target'].isin(df_all_count_g1) & ~df_rels_data['target'].isin(df_all_count_per)].drop_duplicates()
-    df_rels_data.to_csv(f'./datasets/{dataset}/all/final/dataentedges.csv',index=False)
+    df_rels_data.to_csv(f'./datasets/{dataset}/split_transductive/train/dataentedges.csv',index=False)
     print(df_rels_data.shape[0])
 
     # authors and venues
 def save_authors_and_venues(dataset):
-    df_rels_pubs = pd.read_csv(f'./topic_modelling/entities/{dataset}/pubentedges.csv')
-    df_rels_data = pd.read_csv(f'./topic_modelling/entities/{dataset}/dataentedges.csv')
-    entities = pd.read_csv(f'./topic_modelling/entities/{dataset}/entities.csv')
-    pubauthedges = pd.read_csv(f'./datasets/{dataset}/all/final/pubauthedges.csv')
-    dataauthedges = pd.read_csv(f'./datasets/{dataset}/all/final/dataauthedges.csv')
-    publications = pd.read_csv(f'./datasets/{dataset}/all/final/publications.csv')['id'].unique().tolist()
+    df_rels_pubs = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/pubentedges.csv')
+    df_rels_data = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/dataentedges.csv')
+    entities = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/entities.csv')
+    pubauthedges = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/pubauthedges.csv')
+    dataauthedges = pd.read_csv(f./datasets/{dataset}/split_transductive/train/dataauthedges.csv')
+    publications = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/publications.csv')['id'].unique().tolist()
 
     if 'mes' == dataset:
-        publications = pd.read_csv(f'./datasets/{dataset}/all/final/publications.csv')['id'].unique().tolist()
+        publications = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/publications.csv')['id'].unique().tolist()
 
-    datasets = pd.read_csv(f'./datasets/{dataset}/all/final1/datasets.csv')['id'].unique().tolist()
+    datasets = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/datasets.csv')['id'].unique().tolist()
     df_rels_pubs = df_rels_pubs[df_rels_pubs['source'].isin(publications)]
     df_rels_data = df_rels_data[df_rels_data['source'].isin(datasets)]
 
-    df_rels_pubs.drop_duplicates().to_csv(f'./datasets/{dataset}/all/final/pubentedges.csv', index=False)
-    df_rels_data.drop_duplicates().to_csv(f'./datasets/{dataset}/all/final/dataentedges.csv', index=False)
-    entities.drop_duplicates().to_csv(f'./datasets/{dataset}/all/final/entities.csv', index=False)
+    df_rels_pubs.drop_duplicates().to_csv(f'./datasets/{dataset}/split_transductive/train/pubentedges.csv', index=False)
+    df_rels_data.drop_duplicates().to_csv(f'./datasets/{dataset}/split_transductive/train/dataentedges.csv', index=False)
+    entities.drop_duplicates().to_csv(f'./datasets/{dataset}/split_transductive/train/entities.csv', index=False)
 
     df_rels_pubs.rename(columns={'target': 'target1', 'source': 'source1'}, inplace=True)
     df_rels_data.rename(columns={'target': 'target1', 'source': 'source1'}, inplace=True)
 
     if dataset != 'mes':
-        pubvenedges = pd.read_csv(f'./datasets/{dataset}/all/final/pubvenuesedges.csv')
+        pubvenedges = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/pubvenuesedges.csv')
         pubvenueentedges = pd.merge(pubvenedges, df_rels_pubs, left_on='source', right_on='source1', how='outer')
         pubvenueentedges = pubvenueentedges[['target', 'target1']]
         pubvenueentedges.rename(columns={'target': 'source', 'target1': 'target'}, inplace=True)
 
-        # pubvenueentedges.drop_duplicates().to_csv(f'./topic_modelling/entities/{dataset}/venuesentedges.csv',index=False)
-        pubvenueentedges.drop_duplicates().to_csv(f'./datasets/{dataset}/all/final/venuesentedges.csv',index=False)
+        # pubvenueentedges.drop_duplicates().to_csv(f'./datasets/{dataset}/split_transductive/train/venuesentedges.csv',index=False)
+        pubvenueentedges.drop_duplicates().to_csv(f'./datasets/{dataset}/split_transductive/train/venuesentedges.csv',index=False)
         print(pubvenueentedges.shape)
 
     print('inner1')
@@ -263,8 +235,8 @@ def save_authors_and_venues(dataset):
     pubauthedgesentities = pd.merge(pubauthedges, df_rels_pubs, left_on='source', right_on='source1', how='outer')
     pubauthedgesentities = pubauthedgesentities[['target','target1']]
     pubauthedgesentities.rename(columns={'target': 'source', 'target1': 'target'}, inplace=True)
-    # pubauthedgesentities.drop_duplicates().to_csv(f'./topic_modelling/entities/{dataset}/pubauthentedges.csv',index=False)
-    pubauthedgesentities.drop_duplicates().to_csv(f'./datasets/{dataset}/all/final/pubauthentedges.csv',index=False)
+    # pubauthedgesentities.drop_duplicates().to_csv(f'./datasets/{dataset}/split_transductive/train/pubauthentedges.csv',index=False)
+    pubauthedgesentities.drop_duplicates().to_csv(f'./datasets/{dataset}/split_transductive/train/pubauthentedges.csv',index=False)
     print(str(time.time()-st))
     print(pubauthedgesentities.shape)
     print('inner2')
@@ -272,31 +244,26 @@ def save_authors_and_venues(dataset):
     dataauthedgesentities = pd.merge(dataauthedges, df_rels_data, left_on='source', right_on='source1', how='outer')
     dataauthedgesentities = dataauthedgesentities[['target', 'target1']]
     dataauthedgesentities.rename(columns={'target': 'source', 'target1': 'target'}, inplace=True)
-    # dataauthedgesentities.drop_duplicates().to_csv(f'./topic_modelling/entities/{dataset}/dataauthentedges.csv',index=False)
-    dataauthedgesentities.drop_duplicates().to_csv(f'./datasets/{dataset}/all/final/dataauthentedges.csv',index=False)
+    # dataauthedgesentities.drop_duplicates().to_csv(f'./datasets/{dataset}/split_transductive/train/dataauthentedges.csv',index=False)
+    dataauthedgesentities.drop_duplicates().to_csv(f'./datasets/{dataset}/split_transductive/train/dataauthentedges.csv',index=False)
     print(str(time.time()-st))
     print(dataauthedgesentities.shape)
 
 
 
 def analysis(datasets):
-    # analyse publications
-    # f = open(f'./topic_modelling/entities/analyses.txt', 'w')
-    # line = 'Dataset\tMedian outcomes per 1 entity\tMedian entities per 1 outcome\tMedian pubs per 1 entity\tMedian entities per 1 pub\tMedian datasets per 1 entity\tMedian entities per 1 dataset\tMedian authors(p) per 1 entity\tMedian entities per 1 author(p)\tMedian authors(d) per 1 entity\tMedian entities per 1 author(d)\tMedian venues per 1 entity\tMedian entities per 1 venue'
-    # f.write(line)
-
     for dataset in datasets:
         print(dataset)
 
-        # pubs_source = pd.read_csv(f'./topic_modelling/entities/{dataset}/pubentedges.csv')['source'].tolist()
-        # ents_targets = pd.read_csv(f'./topic_modelling/entities/{dataset}/pubentedges.csv')['target'].tolist()
+        # pubs_source = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/pubentedges.csv')['source'].tolist()
+        # ents_targets = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/pubentedges.csv')['target'].tolist()
         if dataset == 'mes':
-            pubs = pd.read_csv(f'./datasets/{dataset}/all/final/publications.csv')
+            pubs = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/publications.csv')
         else:
-            pubs = pd.read_csv(f'./datasets/{dataset}/all/final/publications.csv')
+            pubs = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/publications.csv')
 
-        dats = pd.read_csv(f'./datasets/{dataset}/all/final/datasets.csv')
-        df = pd.read_csv(f'./datasets/{dataset}/all/final/pubentedges.csv')
+        dats = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/datasets.csv')
+        df = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/pubentedges.csv')
         pubs_source = df.groupby('source').size().reset_index(name='Count')
         pubs_source = pubs_source['Count'].tolist()
         print(f'total pubs: {pubs.shape[0]}')
@@ -318,7 +285,7 @@ def analysis(datasets):
         print(f'min publications per entity {str(min(ents_targets))}')
         print('\n\n\n')
 
-        df = pd.read_csv(f'./datasets/{dataset}/all/final/dataentedges.csv')
+        df = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/dataentedges.csv')
         data_source = df.groupby('source').size().reset_index(name='Count')
         data_source = data_source['Count'].tolist()
         print(f'total data: {dats.shape[0]}')
@@ -336,8 +303,8 @@ def analysis(datasets):
         print(f'min datasets per entity {str(min(ents_targets))}')
         print('\n\n\n')
 
-        df1 = pd.read_csv(f'./datasets/{dataset}/all/final/dataentedges.csv')
-        df0 = pd.read_csv(f'./datasets/{dataset}/all/final/pubentedges.csv')
+        df1 = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/dataentedges.csv')
+        df0 = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/pubentedges.csv')
         df = pd.concat([df1,df0],ignore_index=True)
         data_source = df.groupby('source').size().reset_index(name='Count')
         data_source = data_source['Count'].tolist()
@@ -352,11 +319,11 @@ def analysis(datasets):
         print(f'max outcomes per entity {str(max(ents_targets))}')
         print(f'min outcomes per entity {str(min(ents_targets))}\n\n')
 
-        ent = pd.read_csv(f'./datasets/{dataset}/all/final/entities.csv')
+        ent = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/entities.csv')
         print(f'total entities: {ent.shape[0]}')
-        ent = pd.read_csv(f'./datasets/{dataset}/all/final/pubentedges.csv')
+        ent = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/pubentedges.csv')
         print(f'total pub ent edges: {ent.shape[0]}')
-        ent = pd.read_csv(f'./datasets/{dataset}/all/final/dataentedges.csv')
+        ent = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/dataentedges.csv')
         print(f'total data ent edges: {ent.shape[0]}')
 
 
@@ -367,8 +334,8 @@ if __name__ == '__main__':
     dataset = args.dataset
     processors = args.processors
     print('dataset',dataset)
-    # save_entities(dataset,processors)
-    # save_authors_and_venues(dataset)
+    save_entities(dataset,processors)
+    save_authors_and_venues(dataset)
 
     analysis([dataset])
 
