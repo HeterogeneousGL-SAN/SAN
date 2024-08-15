@@ -3,3 +3,6 @@ Entity linking refers to `entity_linking.py` file. To run entity linking run the
 ```
 docker run --rm -ti --gpus '"device=0"' --ipc=host --name entity_container --network san_net -v /path/sanproject/:/code/ san_image:latest python3 augmentation/entity_linking.py -dataset=pubmed
 ```
+This code is parallelized in order to save time. To set the number of processors you can set `-processors=2`.
+
+## Topic Modelling
