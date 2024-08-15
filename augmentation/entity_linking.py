@@ -197,57 +197,8 @@ def save_entities(dataset,processors=25):
     df_rels_data.to_csv(f'./datasets/{dataset}/split_transductive/train/dataentedges.csv',index=False)
     print(df_rels_data.shape[0])
 
-    # authors and venues
-def save_authors_and_venues(dataset):
-    df_rels_pubs = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/pubentedges.csv')
-    df_rels_data = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/dataentedges.csv')
-    entities = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/entities.csv')
-    pubauthedges = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/pubauthedges.csv')
-    dataauthedges = pd.read_csv(f./datasets/{dataset}/split_transductive/train/dataauthedges.csv')
-    publications = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/publications.csv')['id'].unique().tolist()
 
-    if 'mes' == dataset:
-        publications = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/publications.csv')['id'].unique().tolist()
 
-    datasets = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/datasets.csv')['id'].unique().tolist()
-    df_rels_pubs = df_rels_pubs[df_rels_pubs['source'].isin(publications)]
-    df_rels_data = df_rels_data[df_rels_data['source'].isin(datasets)]
-
-    df_rels_pubs.drop_duplicates().to_csv(f'./datasets/{dataset}/split_transductive/train/pubentedges.csv', index=False)
-    df_rels_data.drop_duplicates().to_csv(f'./datasets/{dataset}/split_transductive/train/dataentedges.csv', index=False)
-    entities.drop_duplicates().to_csv(f'./datasets/{dataset}/split_transductive/train/entities.csv', index=False)
-
-    df_rels_pubs.rename(columns={'target': 'target1', 'source': 'source1'}, inplace=True)
-    df_rels_data.rename(columns={'target': 'target1', 'source': 'source1'}, inplace=True)
-
-    if dataset != 'mes':
-        pubvenedges = pd.read_csv(f'./datasets/{dataset}/split_transductive/train/pubvenuesedges.csv')
-        pubvenueentedges = pd.merge(pubvenedges, df_rels_pubs, left_on='source', right_on='source1', how='outer')
-        pubvenueentedges = pubvenueentedges[['target', 'target1']]
-        pubvenueentedges.rename(columns={'target': 'source', 'target1': 'target'}, inplace=True)
-
-        # pubvenueentedges.drop_duplicates().to_csv(f'./datasets/{dataset}/split_transductive/train/venuesentedges.csv',index=False)
-        pubvenueentedges.drop_duplicates().to_csv(f'./datasets/{dataset}/split_transductive/train/venuesentedges.csv',index=False)
-        print(pubvenueentedges.shape)
-
-    print('inner1')
-    st = time.time()
-    pubauthedgesentities = pd.merge(pubauthedges, df_rels_pubs, left_on='source', right_on='source1', how='outer')
-    pubauthedgesentities = pubauthedgesentities[['target','target1']]
-    pubauthedgesentities.rename(columns={'target': 'source', 'target1': 'target'}, inplace=True)
-    # pubauthedgesentities.drop_duplicates().to_csv(f'./datasets/{dataset}/split_transductive/train/pubauthentedges.csv',index=False)
-    pubauthedgesentities.drop_duplicates().to_csv(f'./datasets/{dataset}/split_transductive/train/pubauthentedges.csv',index=False)
-    print(str(time.time()-st))
-    print(pubauthedgesentities.shape)
-    print('inner2')
-    st = time.time()
-    dataauthedgesentities = pd.merge(dataauthedges, df_rels_data, left_on='source', right_on='source1', how='outer')
-    dataauthedgesentities = dataauthedgesentities[['target', 'target1']]
-    dataauthedgesentities.rename(columns={'target': 'source', 'target1': 'target'}, inplace=True)
-    # dataauthedgesentities.drop_duplicates().to_csv(f'./datasets/{dataset}/split_transductive/train/dataauthentedges.csv',index=False)
-    dataauthedgesentities.drop_duplicates().to_csv(f'./datasets/{dataset}/split_transductive/train/dataauthentedges.csv',index=False)
-    print(str(time.time()-st))
-    print(dataauthedgesentities.shape)
 
 
 
@@ -335,7 +286,5 @@ if __name__ == '__main__':
     processors = args.processors
     print('dataset',dataset)
     save_entities(dataset,processors)
-    save_authors_and_venues(dataset)
-
     analysis([dataset])
 
