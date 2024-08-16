@@ -2,8 +2,8 @@ import torch
 from args_list import get_args
 import numpy as np
 import random
-import loader
-import sampler_repro
+import loader_repro as loader
+import sampler_repro as sampler
 from loader import *
 import os
 import tqdm
