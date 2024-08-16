@@ -3,13 +3,13 @@ from args_list import get_args
 import numpy as np
 import random
 import loader
-import sampler
+import sampler_repro
 from loader import *
 import os
 import tqdm
 from sklearn.metrics import roc_auc_score, average_precision_score,f1_score
 from utils import EarlyStoppingClass
-from sampler import RandomWalkWithRestart
+from sampler_repro import RandomWalkWithRestart
 import time
 from model import ScHetGNN
 from torch_geometric import seed_everything
