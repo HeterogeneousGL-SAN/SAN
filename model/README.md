@@ -11,6 +11,7 @@ In this folder there are all the files needed to reproduce/reuse the code of SAN
 - `_inductive` (both `repro` and `gen`) files allow to run the code in inductive (semi and full) setups. This file is useful on in the reproducibility setup
 - `main` files contain allow to run the code and train the model.
 
+**Please, note that if you want to use the graphs already available at: `processed/` folder of the datasets on Figshare, you can only only run the first step of the **Preprocessing** section below and jump directly to the **Experiments** part.
 
 ## Preprocessing
 The very first step is to configure the folders to host the results and the models learnt.
