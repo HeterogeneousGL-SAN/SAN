@@ -12,7 +12,7 @@ from sklearn.metrics import roc_auc_score, average_precision_score, f1_score
 from utils import EarlyStoppingClass
 from sampler_repro import RandomWalkWithRestart
 import time
-from model_repro import ScHetGNN
+from model import ScHetGNN
 from torch_geometric import seed_everything
 
 seed_everything(42)
