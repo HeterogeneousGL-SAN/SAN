@@ -22,10 +22,12 @@ docker run --rm -ti --gpus '"device=0"' --ipc=host --name entity_container --net
 ```
 
 
+**Please note that the step below is not necessary if you use the graphs already provided in the original datasets of figshare inside the folder `processed`**
+
 To generate the `node2vec` based embeddings, run:
 
 ```
-docker run --rm -ti --gpus '"device=0"' --ipc=host --name entity_container --network san_net -v /path/sanproject/:/code/ san_image:latest python3 model/preprocessing.py -dataset=mes -
+docker run --rm -ti --gpus '"device=0"' --ipc=host --name entity_container --network san_net -v /path/sanproject/:/code/ san_image:latest python3 model/preprocessing.py -dataset=mes 
 ```
 The dataset argument can take: pubmed or mes.
 
