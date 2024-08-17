@@ -29,5 +29,22 @@ docker run --rm -ti --gpus '"device=0"' --ipc=host --name entity_container --net
 ```
 The dataset argument can take: pubmed or mes.
 
+## Reproducibility
+To reproduce the experiments in the transductive setup run the following:
+
+```
+docker run --rm -ti --gpus '"device=0"' --ipc=host --name entity_container --network san_net -v /path/sanproject/:/code/ san_image:latest python3 model/main_rw_repro.py -dataset=mes 
+```
+you can set all the args available in the `args_list.py` file. If nothing is set, the default configuration will be applied. This file runs the transductive setup. To run the inductive setup replace the `main_rw_repro.py` with `main_rw_inductive_repro.py`. In this case set the flag `-inductive` and the inductive type: use `-inductive_type=light` for the semi-inductive configuration and `-inductive_type=full` for the full inductive configuration.
+
+These files will run the training phase. Running on mes will take about 1,5 hours with the default configuration. Setting different hyperparameters from the command line will slow down/speed up the process.
+
+To test the models, add the `-test` argument. 
+
+To train/test without metadata (0% configuration in the paper), add: `-no_metadata` to the command above.
+
+To train and test in bootstrap mode, hence with different portions of metadata available, use the same code above but with the following file: `main_rw_bootstrapped_repro.py` and set `-bootstrap=25` (or 50, or 75) to set the portion of datasets without metadata. This will train the SAN model 10 times with 10 different portions of datasets without metadata. 
+
+## Generalizability 
 
 
