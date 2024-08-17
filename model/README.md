@@ -48,5 +48,17 @@ To train/test without metadata (0% configuration in the paper), add: `-no_metada
 To train and test in bootstrap mode, hence with different portions of metadata available, use the same code above but with the following file: `main_rw_bootstrapped_repro.py` and set `-bootstrap=25` (or 50, or 75) to set the portion of datasets without metadata. This will train the SAN model 10 times with 10 different portions of datasets without metadata. 
 
 ## Generalizability 
+You can generalize SAN to new train, validation, test sets partitions. 
 
+The files needed to generalize the code are `main.py` and `main_bootstrapped.py` for the intermediate metadata scenario.
+The model works in the same way as above, hence, to run without metadata add the `no_metadata` flag and to test the trained model add `-test`. The model will be trained only once and you will have to test it on three distinct test sets (transductive, semi inductive and inductive). The bootstrap mode work the same as above. Hence the command to run the experiments is:
+
+```
+docker run --rm -ti --gpus '"device=0"' --ipc=host --name entity_container --network san_net -v /path/sanproject/:/code/ san_image:latest python3 model/main.py -dataset=mes 
+```
+
+To test in inductive mode use:
+```
+docker run --rm -ti --gpus '"device=0"' --ipc=host --name entity_container --network san_net -v /path/sanproject/:/code/ san_image:latest python3 model/main.py -dataset=mes -inductive_type=full
+```
 
