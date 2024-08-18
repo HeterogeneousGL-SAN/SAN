@@ -2,7 +2,7 @@
 In this section we add additional eperiments we performed but we did not add in the submitted paper. In particular we analysed: the performances in terms of AUC (link prediction) and ndcg@5, recall@5 (recommendation) of the baselines run with the augmented graph; the analyses of different aggregation approaches.
 
 ## Baselines
-We evaluated the baselines in two settings: considering the graphs before and after augmentation. While in the paper we reported the results with the original graph, in the tables and plot below we report the results of the baselines run with the augmented graph. The results are reported for 100% and 0% of available metadata.
+We evaluated the baselines in two settings: considering the graphs before and after augmentation. While in the paper we reported the results with the original graph, in the tables and plot below we report the results of the baselines run with the augmented graph. The results are reported for 100% and 0% of available metadata. The corresponding AUC plot for MES is in [Figure 1](mes_aug.pdf) and for PubMed in [Figure 2](pubmed_aug.pdf)
 
 | PubMed (%) | Setting | Metric | SAGE  | GAT   | HGT   | HAN   | HGNN  |
 |------------|---------|--------|-------|-------|-------|-------|-------|
