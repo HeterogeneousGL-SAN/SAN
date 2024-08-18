@@ -58,3 +58,14 @@ The most effective method is multihead attention, while GRU is the least effecti
 Below we report the application of SAN on MES dataset considering different aggregation approaches. In this section we consider the aggregation of the embeddings after node-type based aggregation (the one we performed with concatenation on the submitted paper). We considered the 100% of metadata available.
 For these experiments we aggregated the node type based embeddings with multihead attention mechanism.
 
+| PubMed (%) | Setting | Metric | biLSTM | mh-attention | mean   | concat |
+|------------|---------|--------|--------|--------------|--------|--------|
+| 100%       | Tran    | R@5    | 0.186  | 0.205        | 0.196  | 0.230  |
+|            |         | N@5    | 0.168  | 0.188        | 0.178  | 0.212  |
+|            | Semi    | R@5    | 0.167  | 0.187        | 0.177  | 0.207  |
+|            |         | N@5    | 0.137  | 0.146        | 0.142  | 0.156  |
+|            | Ind     | R@5    | 0.108  | 0.200        | 0.154  | 0.212  |
+|            |         | N@5    | 0.070  | 0.132        | 0.101  | 0.146  |
+
+
+
