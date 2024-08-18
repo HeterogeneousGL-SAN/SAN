@@ -40,6 +40,18 @@ Both in PubMed and MES datasets, the performances of the baselines on the augmen
 ## Aggregation
 We performed node-type based aggregation with multihead attention. However, we also experimented biLSTM, GRU. For the final aggregation, we experimented multihead attention, biLSTM, mean pooling. Bwloe we report the results on MES dataset with 100% of metadata available.
 ### Node type aggregation
+Below we report the application of SAN on MES dataset considering different aggregation approaches. We considered the 100% of metadata available.
+
+| MES (%) | Setting | Metric | biLSTM | GRU  | mh-attention |
+|---------|---------|--------|--------|------|--------------|
+| 100%    | Tran    | R@5    | 0.365  | 0.297 | 0.439        |
+|         |         | N@5    | 0.245  | 0.214 | 0.339        |
+|         | Semi    | R@5    | 0.245  | 0.212 | 0.428        |
+|         |         | N@5    | 0.165  | 0.145 | 0.331        |
+|         | Ind     | R@5    | 0.235  | 0.315 | 0.432        |
+|         |         | N@5    | 0.120  | 0.268 | 0.345        |
+
+The most effective method is multihead attention, while GRU is the least effective.
 
 ### All aggregation
 
