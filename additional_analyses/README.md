@@ -36,7 +36,7 @@ We evaluated the baselines in two settings: considering the graphs before and af
 |            | Ind     | R@5    | 0.030 | 0.194 | 0.000 | 0.000 | 0.070 |
 |            |         | N@5    | 0.012 | 0.106 | 0.000 | 0.000 | 0.037 |
 
-Both in PubMed and MES datasets, the performances of the baselines on the augmented graphs are similar to those of the non-augmented graphs, specifically they differ of at most 0.08.
+Both in PubMed and MES datasets, the performances of the baselines on the augmented graphs are similar to those of the non-augmented graphs, specifically they differ of at most 0.06.
 ## Aggregation
 We performed node-type based aggregation with multihead attention. However, we also experimented biLSTM, GRU. For the final aggregation, we experimented multihead attention, biLSTM, mean pooling. Bwloe we report the results on MES dataset with 100% of metadata available.
 ### Node type aggregation
