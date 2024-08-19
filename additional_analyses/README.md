@@ -1,7 +1,7 @@
 # Additional experiments
 In this section we add additional eperiments we performed but we did not add in the submitted paper. In particular we analysed: the performances in terms of AUC (link prediction) and ndcg@5, recall@5 (recommendation) of the baselines run with the augmented graph; the analyses of different aggregation approaches.
 
-## Baselines
+## Additional Analyses on Baselines
 We evaluated the baselines in two settings: considering the graphs before and after augmentation. While in the paper we reported the results with the original graph, in the tables and plot below we report the results of the baselines run with the augmented graph. The results are reported for 100% and 0% of available metadata. The corresponding AUC plot for MES is in [Figure 1](mes_aug.pdf) and for PubMed in [Figure 2](pubmed_aug.pdf)
 
 
@@ -58,14 +58,24 @@ The most effective method is multihead attention, while GRU is the least effecti
 Below we report the application of SAN on MES dataset considering different aggregation approaches. In this section we consider the aggregation of the embeddings after node-type based aggregation (the one we performed with concatenation on the submitted paper). We considered the 100% of metadata available.
 For these experiments we aggregated the node type based embeddings with multihead attention mechanism.
 
-| PubMed (%) | Setting | Metric | biLSTM | mh-attention | mean   | concat |
-|------------|---------|--------|--------|--------------|--------|--------|
-| 100%       | Tran    | R@5    | 0.186  | 0.205        | 0.196  | 0.230  |
-|            |         | N@5    | 0.168  | 0.188        | 0.178  | 0.212  |
-|            | Semi    | R@5    | 0.167  | 0.187        | 0.177  | 0.207  |
-|            |         | N@5    | 0.137  | 0.146        | 0.142  | 0.156  |
-|            | Ind     | R@5    | 0.108  | 0.200        | 0.154  | 0.212  |
-|            |         | N@5    | 0.070  | 0.132        | 0.101  | 0.146  |
+| MES (%) | Setting | Metric | biLSTM | GRU  | mh-attention |
+|---------|---------|--------|--------|------|--------------|
+| 100%    | Tran    | R@5    | 0.365  | 0.297 | 0.439        |
+|         |         | N@5    | 0.245  | 0.214 | 0.339        |
+|         | Semi    | R@5    | 0.245  | 0.212 | 0.428        |
+|         |         | N@5    | 0.165  | 0.145 | 0.331        |
+|         | Ind     | R@5    | 0.235  | 0.315 | 0.432        |
+|         |         | N@5    | 0.120  | 0.268 | 0.345        |
+
+| MES (%) | Setting | Metric | biLSTM | mh-attention | mean   | concat |
+|---------|---------|--------|--------|--------------|--------|--------|
+| 100%    | Tran    | R@5    | 0.356  | 0.405        | 0.201  | 0.439  |
+|         |         | N@5    | 0.254  | 0.303        | 0.198  | 0.339  |
+|         | Semi    | R@5    | 0.321  | 0.400        | 0.259  | 0.428  |
+|         |         | N@5    | 0.169  | 0.259        | 0.201  | 0.331  |
+|         | Ind     | R@5    | 0.298  | 0.324        | 0.171  | 0.432  |
+|         |         | N@5    | 0.123  | 0.267        | 0.110  | 0.345  |
+
 
 
 
