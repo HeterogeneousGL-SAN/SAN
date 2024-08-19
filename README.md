@@ -14,7 +14,7 @@ MES and PubMed datasets are anonymous and available on [Figshare](https://figsha
 ## Additional Analyses
 Below we report the analyses we performed on SAN and that we did not include in the submitted paper. In particular we analysed: the performances in terms of AUC (link prediction) and ndcg@5, recall@5 (recommendation) of the baselines run with the augmented graph; the analyses of different aggregation approaches.
 
-## Baselines
+## Additional experiments on baselines
 We evaluated the baselines in two settings: considering the graphs before and after augmentation. While in the paper we reported the results with the original graph, in the tables and plot below we report the results of the baselines run with the augmented graph. The results are reported for 100% and 0% of available metadata. The corresponding AUC plot for MES is in `additional_analyses/mes_aug.pdf` and for PubMed in `additional_analyses/pubmed_aug.pdf`.
 
 | MES (%) | Setting | Metric | SAGE  | GAT   | HGT   | HAN   | HGNN  | SAN   |
