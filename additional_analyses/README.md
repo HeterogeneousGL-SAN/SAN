@@ -1,6 +1,14 @@
 # Additional experiments
 In this section we add additional eperiments we performed but we did not add in the submitted paper. In particular we analysed: the performances in terms of AUC (link prediction) and ndcg@5, recall@5 (recommendation) of the baselines run with the augmented graph; the analyses of different aggregation approaches.
+## Transductive baselines
+Below we report the results obtained on dataset recommendation task (nDCG@5 and recall@5) on MES and PubMed datasets of the following models: HVGAE, VGAE, Metapath2vec (M2V), RGCN. The results considered refer to the full metadata setting. The link prediction results are in the plots in `additional_analyses/lp_mes_trans.pdf` and `additional_analyses/lp_pub_trans.pdf`.
 
+| Dataset | Setting | Metric | M2V  | HVGAE   | VGAE   | RGCN  | SAN   |
+|---------|---------|--------|-------|-------|-------|-------|-------|
+| MES    | Tran    | R@5    | 0.001 | 0.014 | 0.100 | 0.004  | 0.439 |
+|         |         | N@5    | 0.001 | 0.041 | 0.219 | 0.005  | 0.339 |
+| PubMed     | Tran    | R@5    | 0.000 | 0.006 | 0.036 | 0.002  | 0.230 |
+|            |         | N@5    | 0.000 | 0.027 | 0.100 | 0.002  | 0.212 |
 ## Additional Analyses on Baselines
 We evaluated the baselines in two settings: considering the graphs before and after augmentation. While in the paper we reported the results with the original graph, in the tables and plot below we report the results of the baselines run with the augmented graph. The results are reported for 100% and 0% of available metadata. The corresponding AUC plot for MES is in [Figure 1](mes_aug.pdf) and for PubMed in [Figure 2](pubmed_aug.pdf)
 
