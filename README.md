@@ -9,12 +9,22 @@ MES and PubMed datasets are anonymous and available on [Figshare](https://figsha
 - The folder `split` contains the scripts needed to partition data into training, validation and test (transductive, inductive, semi-inductive) sets.
 - The folder `baselines` contains the implementation of the baselines (HAN, HGT, SAGE, GAT, ST-T)
 - The folder `model` contains the implementation of SAN comprising the sampling implemented via random walk, and aggregation implemented with multihead attention.
-- The folder `additional_analyse` contains other analyses and experiments conducted on different settings wrt those reported in the paper.
+- The folder `additional_analyses` contains other analyses and experiments conducted on different settings wrt those reported in the paper.
 
 ## Additional Analyses
-Below we report the analyses we performed on SAN and that we did not include in the submitted paper. In particular we analysed: the performances in terms of AUC (link prediction) and ndcg@5, recall@5 (recommendation) of the baselines run with the augmented graph; the analyses of different aggregation approaches.
+Below we report the analyses we performed on SAN and that we did not include in the submitted paper. In particular we analysed: a set of transductive baselines, the performances in terms of AUC (link prediction) and ndcg@5, recall@5 (recommendation) of the baselines run with the augmented graph; the analyses of different aggregation approaches.
+## Transductive baselines
+Below we report the results obtained on dataset recommendation task (nDCG@5 and recall@5) on MES and PubMed datasets of the following models: HVGAE, VGAE, Metapath2vec (M2V), RGCN. The results considered refer to the full metadata setting. The link prediction results are in the plots in `additional_analyses/lp_mes_trans.pdf` and `additional_analyses/lp_pub_trans.pdf`.
 
-## Additional experiments on baselines
+| Dataset | Setting | Metric | M2V  | HVGAE   | VGAE   | RGCN  | SAN   |
+|---------|---------|--------|-------|-------|-------|-------|-------|
+| MES    | Tran    | R@5    | 0.001 | 0.014 | 0.100 | 0.004  | 0.439 |
+|         |         | N@5    | 0.001 | 0.041 | 0.219 | 0.005  | 0.339 |
+| PubMed     | Tran    | R@5    | 0.000 | 0.006 | 0.036 | 0.002  | 0.230 |
+|            |         | N@5    | 0.000 | 0.027 | 0.100 | 0.002  | 0.212 |
+
+
+## Additional experiments on baselines (augmented graphs)
 We evaluated the baselines in two settings: considering the graphs before and after augmentation. While in the paper we reported the results with the original graph, in the tables and plot below we report the results of the baselines run with the augmented graph. The results are reported for 100% and 0% of available metadata. The corresponding AUC plot for MES is in `additional_analyses/mes_aug.pdf` and for PubMed in `additional_analyses/pubmed_aug.pdf`. The last column includes the results of SAN (also reported in the submitted paper).
 
 | MES (%) | Setting | Metric | SAGE  | GAT   | HGT   | HAN   | HGNN  | SAN   |
