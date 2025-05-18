@@ -3,6 +3,8 @@ This repository contains the code of SAN, proposed at TPDL'25.
 MES and PubMed datasets are anonymous and available on [Figshare](https://figshare.com/s/1e11a6f03fbf97d61936)
 
 ## Project structure
+The folder cutoff10 contains the performances of MM-SAN and the baseline methods in terms of ndcg@10 and recall@10.
+The main folder of the project is MM-SAN-main. 
 - In the folder `utils` there are the file necessary to create the docker image and run the container.
 - The folder [preprocessing` contains the scripts to preprocess data and make these files ready for the augmentation, sampling and aggregation phases. Please, note that the files available on Figshare are already processed.
 - The folder `augmentation` contains the scripts to perform entity linking and topic modelling and to analyze the data.
@@ -10,7 +12,6 @@ MES and PubMed datasets are anonymous and available on [Figshare](https://figsha
 - The folder `baselines` contains the implementation of the baselines (HAN, HGT, SAGE, GAT, ST-T)
 - The folder `model` contains the implementation of SAN comprising the sampling implemented via random walk, and aggregation implemented with multihead attention.
 - The folder `additional_analyses` contains other analyses and experiments conducted on different settings wrt those reported in the paper.
-
 
 ## Before running
 ### Handle the data
@@ -78,15 +79,13 @@ The argument `dataset` can take: `mes` and `pubmed` datasets
 ### Experiments
 In this folder there are all the files needed to reproduce/reuse the code of SAN. The files ending with `_repro` are files that can be used to reproduce the code to our train, validation and test sets. All the other files instead, are files needed for generalizability purposes to new training, validation, test sets.
 
-- `sampler_repro` and `sampler` contain the implementation of random walks, walks selection and neighbors selection for each node tyoe
-- `loader_repro` and `loader` contain the code to load the torch geometric dataset(s)
-- `model_repro` and `model` contain the implementation of the SAN model -- i.e., the aggregation phase of the pipeline. Other than multihead attention mentioned in the paper as the best approach, the model allows to use also biLSTM, GRU and mean pooling instead of multihead attention and concatenation for embedding aggregation.
+- `sampler` contain the implementation of random walks, walks selection and neighbors selection for each node tyoe
+- `loader` contain the code to load the torch geometric dataset(s)
+-  `model` contain the implementation of the SAN model -- i.e., the aggregation phase of the pipeline. Other than multihead cross attention mentioned in the paper as the best approach, the model allows to use also biLSTM, GRU and mean pooling instead of multihead attention and concatenation for embedding aggregation.
 - `utils` contains a set of function useful to the model --i.e., early stopping implementation and networkX useful functions
 - `args_list` contains the list of arguments that it is possible to set to run the model such as the number of epochs, the number of heads and minibatch size
 - `preprocessing` contains the code to create the node2vec based vectors
-- `_bootstrapped` files contain the implementation of intermediate metadata scenario -- we ran SAN 10 times and evaluated it 10 times in order to random samples always different sets of datasets without metadata, in order to allow for the highest variability and ensure experiments robustness
-- `_inductive` (both `repro` and `gen`) files allow to run the code in inductive (semi and full) setups. This file is useful on in the reproducibility setup
-- `main` files contain allow to run the code and train the model.
+
 
 **Please, note that if you want to use the graphs already available at: `processed/` folder of the datasets on Figshare, you can only only run the first step of the **Preprocessing** section below and jump directly to the **Experiments** part.
 
@@ -113,40 +112,36 @@ The dataset argument can take: pubmed or mes.
 To reproduce the experiments in the transductive setup run the following:
 
 ```
-docker run --rm -ti --gpus '"device=0"' --ipc=host --name entity_container --network san_net -v /path/sanproject/:/code/ san_image:latest python3 model/main_rw_repro.py -dataset=mes 
-```
-you can set all the args available in the `args_list.py` file. If nothing is set, the default configuration will be applied. This file runs the transductive setup. To run the inductive setup replace the `main_rw_repro.py` with `main_rw_inductive_repro.py`. In this case set the flag `-inductive` and the inductive type: use `-inductive_type=light` for the semi-inductive configuration and `-inductive_type=full` for the full inductive configuration.
-
-These files will run the training phase. Running on mes will take about 1,5 hours with the default configuration. Setting different hyperparameters from the command line will slow down/speed up the process.
-
-To test the models, add the `-test` argument. 
-
-To train/test without metadata (0% configuration in the paper), add: `-no_metadata` to the command above.
-
-To train and test in bootstrap mode, hence with different portions of metadata available, use the same code above but with the following file: `main_rw_bootstrapped_repro.py` and set `-bootstrap=25` (or 50, or 75) to set the portion of datasets without metadata. This will train the SAN model 10 times with 10 different portions of datasets without metadata. 
-
-### Generalizability 
-You can generalize SAN to new train, validation, test sets partitions. 
-
-The files needed to generalize the code are `main.py` and `main_bootstrapped.py` for the intermediate metadata scenario.
-The model works in the same way as above, hence, to run without metadata add the `no_metadata` flag and to test the trained model add `-test`. The model will be trained only once and you will have to test it on three distinct test sets (transductive, semi inductive and inductive). The bootstrap mode work the same as above. Hence the command to run the experiments is:
-
-```
-docker run --rm -ti --gpus '"device=0"' --ipc=host --name entity_container --network san_net -v /path/sanproject/:/code/ san_image:latest python3 model/main.py -dataset=mes 
+docker run --rm -ti --gpus '"device=0"' --ipc=host --name entity_container --network san_net -v /path/sanproject/:/code/ san_image:latest python3 model/main.py -dataset=mes -rec
 ```
 
-To test in inductive mode use:
+To test the model:
+
 ```
-docker run --rm -ti --gpus '"device=0"' --ipc=host --name entity_container --network san_net -v /path/sanproject/:/code/ san_image:latest python3 model/main.py -dataset=mes -inductive_type=full
+docker run --rm -ti --gpus '"device=0"' --ipc=host --name entity_container --network san_net -v /path/sanproject/:/code/ san_image:latest python3 model/main.py -dataset=mes -test -rec
 ```
+To test the model in semi- and inductive setupd:
+
+```
+docker run --rm -ti --gpus '"device=0"' --ipc=host --name entity_container --network san_net -v /path/sanproject/:/code/ san_image:latest python3 model/main.py -dataset=mes -test
+-inductive_type=light -rec
+```
+```
+docker run --rm -ti --gpus '"device=0"' --ipc=host --name entity_container --network san_net -v /path/sanproject/:/code/ san_image:latest python3 model/main.py -dataset=mes -test
+-inductive_type=full -rec
+```
+
+To test the model removing different splits of datasets metadata add the split param setting it to the preferred value (the value is a percentage):
+```
+docker run --rm -ti --gpus '"device=0"' --ipc=host --name entity_container --network san_net -v /path/sanproject/:/code/ san_image:latest python3 model/main.py -dataset=mes -test
+-split=25 -rec
+```
+
+The dataset usable are: ```mes``` and ```pubmed```
 
 ## Baselines
 This folder contains the baselines reported in the paper. The code automatically generates the graphs needed to run the experiments. In this the graphs are those BEFORE the augmentation procedure, hence they differ from those provided in `processed` folder.
 
-Before running the baselines, use the command below to generate the folders needed to run the baselines (i.e., the setup).
-```
-docker run --rm -ti --gpus '"device=0"' --ipc=host --name baselines_container --network san_net -v /path/sanproject/:/code/ san_image:latest python3 baselines/baselines_setup.py
-```
 
 To run the baselines run:
 ```
