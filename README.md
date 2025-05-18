@@ -3,8 +3,6 @@ This repository contains the code of SAN, proposed at TPDL'25.
 MES and PubMed datasets are anonymous and available on [Figshare](https://figshare.com/s/1e11a6f03fbf97d61936)
 
 ## Project structure
-The folder cutoff10 contains the performances of MM-SAN and the baseline methods in terms of ndcg@10 and recall@10.
-The main folder of the project is MM-SAN-main. 
 - In the folder `utils` there are the file necessary to create the docker image and run the container.
 - The folder [preprocessing` contains the scripts to preprocess data and make these files ready for the augmentation, sampling and aggregation phases. Please, note that the files available on Figshare are already processed.
 - The folder `augmentation` contains the scripts to perform entity linking and topic modelling and to analyze the data.
@@ -112,29 +110,29 @@ The dataset argument can take: pubmed or mes.
 To reproduce the experiments in the transductive setup run the following:
 
 ```
-docker run --rm -ti --gpus '"device=0"' --ipc=host --name entity_container --network san_net -v /path/sanproject/:/code/ san_image:latest python3 model/main.py -dataset=mes -rec
+docker run --rm -ti --gpus '"device=0"' --ipc=host --name entity_container --network san_net -v /path/sanproject/:/code/ san_image:latest python3 model/main.py -dataset=mes -lp
 ```
 
 To test the model:
 
 ```
-docker run --rm -ti --gpus '"device=0"' --ipc=host --name entity_container --network san_net -v /path/sanproject/:/code/ san_image:latest python3 model/main.py -dataset=mes -test -rec
+docker run --rm -ti --gpus '"device=0"' --ipc=host --name entity_container --network san_net -v /path/sanproject/:/code/ san_image:latest python3 model/main.py -dataset=mes -test -lp
 ```
 To test the model in semi- and inductive setupd:
 
 ```
 docker run --rm -ti --gpus '"device=0"' --ipc=host --name entity_container --network san_net -v /path/sanproject/:/code/ san_image:latest python3 model/main.py -dataset=mes -test
--inductive_type=light -rec
+-inductive_type=light -lp
 ```
 ```
 docker run --rm -ti --gpus '"device=0"' --ipc=host --name entity_container --network san_net -v /path/sanproject/:/code/ san_image:latest python3 model/main.py -dataset=mes -test
--inductive_type=full -rec
+-inductive_type=full -lp
 ```
 
 To test the model removing different splits of datasets metadata add the split param setting it to the preferred value (the value is a percentage):
 ```
 docker run --rm -ti --gpus '"device=0"' --ipc=host --name entity_container --network san_net -v /path/sanproject/:/code/ san_image:latest python3 model/main.py -dataset=mes -test
--split=25 -rec
+-split=25 -lp
 ```
 
 The dataset usable are: ```mes``` and ```pubmed```
