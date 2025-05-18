@@ -1,22 +1,24 @@
+import pickle
+
 import torch
 from args_list import get_args
 import numpy as np
 import random
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
+import torch.nn as nn
 import loader
 import sampler
 from loader import *
 import tqdm
 from sklearn.metrics import roc_auc_score, average_precision_score, f1_score
 from utils import EarlyStoppingClass
-from sampler import RandomWalkWithRestart
+from sampler_sigir import RandomWalkWithRestart
 import time
-from model import ScHetGNN
+from model_sigir import ScHetGNN
 from torch_geometric import seed_everything
 
-seed_everything(42)
+
 import torch.nn.functional as F
 
 # in transductive basta fare i path una volta, tanto i nodi li ho sempre visti in ogni set
@@ -40,7 +42,7 @@ args = get_args()
 
 def seed_torch(seed=42):
     random.seed(seed)
-
+    seed_everything(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -50,9 +52,10 @@ def seed_torch(seed=42):
     torch.backends.cudnn.deterministic = True
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
     torch.use_deterministic_algorithms(True)
+    torch.backends.cudnn.enabled = False
+    torch.set_rng_state(torch.get_rng_state())
 
 
-seed_torch()
 
 
 # torch.use_deterministic_algorithms(True)
@@ -82,25 +85,55 @@ def cosine_similarity(emb1, emb2):
     similarity = dot_product / (norm_vector1 * norm_vector2)
     return similarity
 
+def load_embeddings(filename):
+    """Load embeddings from a file using pickle."""
+    with open(filename, 'rb') as f:
+        embeddings = pickle.load(f)
+    print(f"Embeddings loaded from {filename}")
+    return embeddings
 
 class Trainer:
     def __init__(self, args):
         # self.device = 'cpu'
         # if args.train:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-        print(f'DEVICE {self.device}')
         self.args = args
+        print(f'DEVICE {self.device}')
 
         train_dataset = loader.ScholarlyDataset(root=f'datasets/{args.dataset}/split_transductive/train/')
         self.train_root = train_dataset.root
         self.dataset = train_dataset[0]
         if args.no_metadata:
             self.dataset['dataset'].x = torch.ones(self.dataset['dataset'].x.shape[0], 384)
+
+
+        if args.split > 0:
+            # Sostituire i valori di .x per i nodi campionati
+            sampled_indices = torch.randperm(self.dataset['dataset'].num_nodes)[:int(args.split/100 * self.dataset['dataset'].num_nodes)]
+
+            repeated_embeddings = load_embeddings("model/empty_embedding.pkl")
+            repeated_embeddings = np.tile(repeated_embeddings, (len(sampled_indices), 1))
+            repeated_embeddings_tensor = torch.tensor(repeated_embeddings, dtype=torch.float)
+            self.dataset['dataset'].x[sampled_indices] = repeated_embeddings_tensor
+            self.dataset['dataset'].x[sampled_indices] = torch.ones(len(sampled_indices), 384)
+
+
         print(f'TEST {args.test}')
         self.walker = RandomWalkWithRestart(self.args, self.dataset, 'transductive train',test=args.test)
         self.model = ScHetGNN(args).to(self.device)
+
+
         self.model.init_weights()
+        # print("Pesi inizializzati:")
+        # for name, param in self.model.named_parameters():
+        #     if 'weight' in name:
+        #         print(f"{name}:\n{param.data}\n")
+        #
+        #     # Se vuoi stampare anche i bias
+        #     if 'bias' in name:
+        #         print(f"{name}:\n{param.data}\n")
+
+        self.model.to(self.device)
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=args.lr, weight_decay=args.wd)
 
     def get_walks(self):
@@ -164,17 +197,10 @@ class Trainer:
 
     def test(self, test_positive_pd_edges, test_negative_pd_edges, epoch, stringa, best=False, type='trans'):
         print(f'TYPE: {type}')
+        self.model.eval()
         with torch.no_grad():
 
             output_file_path = f"model/checkpoint/transductive/results/{self.args.dataset}/{self.args.enriched}/UNIQUE_RESULTS_unique_{epoch}_{stringa}_{type}.txt"
-            if self.args.hetgnn:
-                output_file_path = f"model/checkpoint/transductive/results/{self.args.dataset}/{self.args.enriched}/UNIQUE_RESULTS_unique_{epoch}_{stringa}_{type}_hetgnn.txt"
-
-            if self.args.no_metadata:
-                output_file_path = f"model/checkpoint/transductive/results/{self.args.dataset}/{self.args.enriched}/UNIQUE_RESULTS_unique_{epoch}_{stringa}_{type}_no_metadata.txt"
-                if self.args.hetgnn:
-                    output_file_path = f"model/checkpoint/transductive/results/{self.args.dataset}/{self.args.enriched}/UNIQUE_RESULTS_unique_{epoch}_{stringa}_{type}__no_metadata_hetgnn.txt"
-
             print(output_file_path)
             if best:
                 output_file_path = f"model/checkpoint/transductive/results/{self.args.dataset}/{self.args.enriched}/BEST_unique_{epoch}_{stringa}.txt"
@@ -182,122 +208,260 @@ class Trainer:
                 output_file_path = f"model/checkpoint/transductive/results/{self.args.dataset}/{self.args.enriched}/LAST_unique_{epoch}_{stringa}.txt"
 
             if self.args.eval_lr:
-                output_file_path = f"model/checkpoint/transductive/results/{self.args.dataset}/ablation/lr_{self.args.lr}/{epoch}_{stringa}.txt"
+                folder_path = f"model/checkpoint/transductive/results/{self.args.dataset}/ablation/lr_{self.args.lr}"
+                os.makedirs(folder_path, exist_ok=True)
+                output_file_path = f"{folder_path}/{epoch}_{stringa}.txt"
+
             elif self.args.eval_batch:
+                folder_path = f"model/checkpoint/transductive/results/{self.args.dataset}/ablation/batch_{self.args.batch_size}"
+                os.makedirs(folder_path, exist_ok=True)
                 output_file_path = f"model/checkpoint/transductive/results/{self.args.dataset}/ablation/batch_{self.args.batch_size}/{epoch}_{stringa}.txt"
+
             elif self.args.eval_combine_aggregation:
+                folder_path = f"model/checkpoint/transductive/results/{self.args.dataset}/ablation/aggr_all_{self.args.all_aggregation}"
+                os.makedirs(folder_path, exist_ok=True)
                 output_file_path = f"model/checkpoint/transductive/results/{self.args.dataset}/ablation/aggr_all_{self.args.all_aggregation}/{epoch}_{stringa}.txt"
+
             elif self.args.eval_aggregation:
+                folder_path = f"model/checkpoint/transductive/results/{self.args.dataset}/ablation/aggr_{self.args.core_aggregation}"
+                os.makedirs(folder_path, exist_ok=True)
                 output_file_path = f"model/checkpoint/transductive/results/{self.args.dataset}/ablation/aggr_{self.args.core_aggregation}/{epoch}_{stringa}.txt"
+
             elif self.args.eval_neigh:
+                folder_path = f"model/checkpoint/transductive/results/{self.args.dataset}/ablation/neigh_{self.args.n_cores}_{self.args.n_keys_hubs}_{self.args.n_top_hubs}"
+                os.makedirs(folder_path, exist_ok=True)
                 output_file_path = f"model/checkpoint/transductive/results/{self.args.dataset}/ablation/neigh_{self.args.n_cores}_{self.args.n_keys_hubs}_{self.args.n_top_hubs}/{epoch}_{stringa}.txt"
+
             elif self.args.eval_heads:
+                folder_path = f"model/checkpoint/transductive/results/{self.args.dataset}/ablation/heads_{self.args.heads}"
+                os.makedirs(folder_path, exist_ok=True)
                 output_file_path = f"model/checkpoint/transductive/results/{self.args.dataset}/ablation/heads_{self.args.heads}/{epoch}_{stringa}.txt"
             f = open(output_file_path, 'w')
             f.write(stringa + '\n')
             self.model.eval()
             auc_tot = 0
             ap_tot = 0
-            rec_tot = 0
-            prec_tot = 0
-            ndcg_tot = 0
-            if not os.path.exists(f'./model/data/test_walks/{self.args.dataset}_best_test_paths.txt'):
-                range_s = 10
-                if self.args.dataset == 'pubmed':
-                    range_s = 1
-                for iter in range(range_s):
-                    print('eval round: ', str(iter))
-                    sources = list(self.y_test_true_labels.keys())
-                    neg_sources = list(test_negative_pd_edges[0].tolist())
-                    datasets = list(self.dataset['dataset'].mapping.keys())
-                    publications = list(self.dataset['publication'].mapping.keys())
-                    pos_source = [self.dataset['publication'].rev_mapping[j] for j in sources]
-                    neg_source = [self.dataset['publication'].rev_mapping[j] for j in neg_sources]
-                    all_seeds = pos_source + neg_source + datasets
-                    print('attention')
-                    print('p_10008' in pos_source)
-                    print('p_10008' in neg_source)
-                    self.walker.set_seeds(all_seeds)
+            f1_tot = 0
+            #if not os.path.exists(f'./model/data/test_walks/{self.args.dataset}_best_test_paths.txt'):
+            range_s = 40
+            if self.args.dataset == 'pubmed':
+                range_s = 30
+            # if self.args.dataset == 'mes' and self.args.inductive_type == 'trans':
+            #     range_s = 1
+            # mes: 27,28
+            # pubmed: 6, 29
+            selected_seeds_walks_1,selected_seeds_cores_1,selected_seeds_hubs_top_1,selected_seeds_hubs_key_1 = [],[],[],[]
 
-                    if not os.path.exists(f'./model/data/test_walks/{self.args.dataset}_{iter}_{type}_unique_test_paths.txt'):
-                        ff = open(f'./model/data/test_walks/{self.args.dataset}_{iter}_{type}_unique_test_paths.txt', 'w')
-                        all_walks = self.walker.create_random_walks(seeds_in=all_seeds)
-                        print(f'created {len(all_walks)} random walks')
-                        for walk in all_walks:
-                            ff.write(' '.join(walk))
-                            ff.write('\n')
-                        print('written')
-                        ff.close()
+            for iter in range(1):
+                print('eval round: ', str(iter))
+                removed,targets_0 = [],[]
+                sources = list(self.y_test_true_labels.keys())
+                neg_sources = list(test_negative_pd_edges[0].tolist())
+                datasets = list(self.dataset['dataset'].mapping.keys())
+                pos_source = [self.dataset['publication'].rev_mapping[j] for j in sources]
+                neg_source = [self.dataset['publication'].rev_mapping[j] for j in neg_sources]
+                all_seeds = pos_source + neg_source + datasets
+                print(len(datasets), len(pos_source), len(neg_source), len(all_seeds))
+
+
+                print(len(datasets), len(pos_source), len(neg_source), len(all_seeds))
+                self.walker.set_seeds(all_seeds)
+                if self.args.dataset == 'mes' :
+                    if self.args.inductive_type == 'trans':
+                        iter = 3
+                    elif self.args.inductive_type == 'light':
+                        iter = 13
                     else:
-                        ff = open(f'./model/data/test_walks/{self.args.dataset}_{iter}_{type}_unique_test_paths.txt', 'r')
-                        all_walks = ff.readlines()
-                        ff.close()
-                        walks = [w.split() for w in all_walks]
-                        all_walks = {seed: [] for seed in self.walker.G.nodes if
-                                     self.walker.is_publication(seed) or self.walker.is_dataset(seed)}
-                        for walk in walks:
-                            all_walks[walk[0]].append(walk)
-                        all_walks = {k: v for k, v in all_walks.items() if len(v) > 0}
-                        all_walks = [v for k, v in all_walks.items() if k in all_seeds]
-                        all_walks = [inner for outer in all_walks for inner in outer]
-                    ww = [w[0] for w in all_walks]
-                    print('att1')
-                    print('p_10008' in ww)
-                    selected_seeds_walks, selected_seeds_cores, selected_seeds_hubs_key, selected_seeds_hubs_top = self.walker.select_walks_mp(
-                        all_walks)
-                    seed_vectors, seed_vectors_net, net_cores, cores, net_keys, keys, hubs, _, _, _, _, _, _, _, _ = self.walker.get_neighbours_vector(
-                        selected_seeds_cores,
-                        selected_seeds_hubs_key,
-                        selected_seeds_hubs_top)
+                        iter = 16
+                else:
+                    if self.args.inductive_type == 'trans':
+                        iter = 8
+                    elif self.args.inductive_type == 'light':
+                        iter = 4
+                    else:
+                        iter = 14
+                if not os.path.exists(f'./model/data/test_walks/{self.args.dataset}_{iter}_{type}_unique_test_paths_0.txt') :
+                    all_walks = self.walker.create_random_walks(seeds_in=all_seeds)
+                    print(f'created {len(all_walks)} random walks')
+                    #if not args.eval_aggregation:
+                    ff = open(f'./model/data/test_walks/{self.args.dataset}_{iter}_{type}_unique_test_paths_0.txt', 'w')
+                    for walk in all_walks:
+                        ff.write(' '.join(walk))
+                        ff.write('\n')
+                    print('written')
+                    ff.close()
+                else:
+                    print('open')
 
-                    pos_source_indices = [all_seeds.index(j) for i, j in enumerate(pos_source)]
-                    pos_target_indices = [all_seeds.index(j) for i, j in enumerate(datasets)]
+                    ff = open(f'./model/data/test_walks/{self.args.dataset}_{iter}_{type}_unique_test_paths_0.txt', 'r')
+                    all_walks = ff.readlines()
+                    all_walks = [w.split() for w in all_walks]
+                    ff.close()
+                #
+                walks = [w for w in all_walks]
+                all_walks = {seed: [] for seed in self.walker.G.nodes if
+                             self.walker.is_publication(seed) or self.walker.is_dataset(seed)}
 
-                    final_embeddings = self.model(seed_vectors, seed_vectors_net, net_cores, cores, net_keys, keys,
-                                                  hubs, core_agg=self.args.core_aggregation,
-                                                  key_agg=self.args.key_aggregation, top_agg=self.args.top_aggregation,
-                                                  all_agg=self.args.all_aggregation)
+                for walk in walks:
+                    all_walks[walk[0]].append(walk)
 
-                    # Calcola il prodotto scalare tra gli embeddings normalizzati
-                    pub_embeddings = F.normalize(final_embeddings[pos_source_indices], p=2, dim=1)
-                    data_embeddings = F.normalize(final_embeddings[pos_target_indices], p=2, dim=1)
-                    final_matrix = torch.mm(pub_embeddings, data_embeddings.t())
-                    print(f'final matrix shape {final_matrix.shape}')
-                    final_matrix_filtered = torch.mm(pub_embeddings, data_embeddings.t())
-                    print(f'final matrix shape {final_matrix_filtered.shape}')
-                    print(final_matrix)
 
-                    top_values, top_indices = torch.topk(final_matrix, k=len(datasets), dim=1)
-                    print(top_values)
-                    print(top_indices)
-                    y_test_predicted_labels_norerank = {source: [] for source in sources}
-                    # mapped_results = self.trivial_baselines()
-                    for i, lista in enumerate(top_indices.tolist()):
-                        y_test_predicted_labels_norerank[sources[i]] = lista[0:self.args.topk]
+                all_walks = {k: v for k, v in all_walks.items() if len(v) > 0}
+                all_walks = [v for k, v in all_walks.items() if k in all_seeds]
+                all_walks = [inner for outer in all_walks for inner in outer]
+                #print(all_walks[0:10])
+                selected_seeds_walks, selected_seeds_cores, selected_seeds_hubs_key, selected_seeds_hubs_top = self.walker.select_walks_mp(
+                    all_walks)
 
-                    precision, no_rer_precision = 0, 0
-                    recall, no_rer_recall = 0, 0
-                    ndcg, no_rer_ndcg = 0, 0
-                    run = []
-                    print(len(sources))
+                # selected_seeds_walks_0 = [elemento for sottolista in selected_seeds_walks for elemento in sottolista]
+                # selected_seeds_walks_0 = [elemento for sottolista in selected_seeds_walks_0 for elemento in sottolista]
+                # selected_seeds_cores_0 = [elemento for sottolista in selected_seeds_cores for elemento in sottolista]
+                # selected_seeds_hubs_top_0 = [elemento for sottolista in selected_seeds_hubs_top for elemento in sottolista]
+                # selected_seeds_hubs_key_0 = [elemento for sottolista in selected_seeds_hubs_key for elemento in sottolista]
+                # print(selected_seeds_walks_0[0:5])
+                # print(selected_seeds_cores_0[0:5])
+                # print(selected_seeds_hubs_top_0[0:5])
+                # print(selected_seeds_hubs_key_0[0:5])
+                # if iter == 0:
+                #     selected_seeds_walks_1 = selected_seeds_walks_0
+                #     selected_seeds_cores_1 = selected_seeds_cores_0
+                #     selected_seeds_hubs_top_1 = selected_seeds_hubs_top_0
+                #     selected_seeds_hubs_key_1 = selected_seeds_hubs_key_0
+                # if iter == 1:
+                #     for i,j in zip(selected_seeds_walks_0, selected_seeds_walks_1):
+                #         if i != j:
+                #             print('attenzione walk')
+                #
+                #     for i, j in zip(selected_seeds_cores_0, selected_seeds_cores_1):
+                #         if i != j:
+                #             print('attenzione core')
+                #
+                #     for i, j in zip(selected_seeds_hubs_top_0, selected_seeds_hubs_top_1):
+                #         if i != j:
+                #             print('attenzione top')
+                #
+                #     for i, j in zip(selected_seeds_hubs_key_0, selected_seeds_hubs_key_1):
+                #         if i != j:
+                #             print('attenzione key')
 
-                    # LINK PREDICTION
-                    y_true_test = np.array([1] * test_positive_pd_edges.size(1) + [0] * test_negative_pd_edges.size(1))
-                    all_walks = None
-                    if os.path.exists(f'./model/data/test_walks/{self.args.dataset}_{iter}_{type}_unique_test_paths.txt'):
-                        g = open(f'./model/data/test_walks/{self.args.dataset}_{iter}_{type}_unique_test_paths.txt', 'r')
-                        all_walks = g.readlines()
-                        walks = [w.split() for w in all_walks]
-                        print('att 2')
-                        print('p_10008' in [w[0] for w in walks])
-                        all_walks = {seed: [] for seed in self.walker.G.nodes if
-                                     self.walker.is_publication(seed) or self.walker.is_dataset(seed)}
+                seed_vectors, seed_vectors_net, net_cores, cores, net_keys, keys, net_hubs, hubs, _, _, _, _, _, _, _, _ = self.walker.get_neighbours_vector(
+                    selected_seeds_cores,
+                    selected_seeds_hubs_key,
+                    selected_seeds_hubs_top)
+                # print(seed_vectors[0:5])
+                # print(seed_vectors_net[0:5])
+                # print(net_cores[0:5])
+                k = [tuple([sublist[0],sublist[1]]) for lista in keys for sublist in lista]
+                k = sorted(k, key=lambda tup: (tup[0],tup[1]))
+                k_path = "./model/data/test_walks/keys0.json"
 
-                        for walk in walks:
-                            all_walks[walk[0]].append(walk)
-                        all_walks = {k: v for k, v in all_walks.items() if len(v) > 0}
-                    print('att 2')
-                    print('p_10008' in list(all_walks.keys()))
+                # Se i pesi non sono stati ancora salvati, salvali
+                # if not os.path.exists(k_path):
+                #     json.dump(k, open(k_path, 'w'))
+                # else:
+                #     kk = json.load(open(k_path, 'r'))
+                #     for i,j in zip(k,kk):
+                #         if tuple(i) != tuple(j):
+                #             print(f'different: {i}, {j}')
+                # print(keys[0:1])
+                # print(hubs[0:1])
+                pos_source_indices = [all_seeds.index(j) for i, j in enumerate(pos_source)]
+
+                pos_target_indices = [all_seeds.index(j) for i, j in enumerate(datasets)]
+                if self.model.training:
+                    print("Il modello è in modalità TRAIN")
+                else:
+                    print("Il modello è in modalità EVAL")
+                torch.cuda.synchronize()
+                self.model = self.model.float()
+                final_embeddings = self.model(seed_vectors, seed_vectors_net, net_cores, cores, net_keys, keys,
+                                              net_hubs,hubs, core_agg=self.args.core_aggregation,
+                                              key_agg=self.args.key_aggregation, top_agg=self.args.top_aggregation,
+                                              all_agg=self.args.all_aggregation)
+
+                weights_path = "./model/data/test_walks/initial_weights.pth"
+
+                # Se i pesi non sono stati ancora salvati, salvali
+                if not os.path.exists(weights_path):
+                    torch.save(self.model.state_dict(), weights_path)
+                    print("Pesi iniziali salvati.")
+                else:
+                    saved_weights = torch.load(weights_path)
+
+                    equal = True
+                    # for (name, param), (saved_name, saved_param) in zip(self.model.named_parameters(),
+                    #                                                     saved_weights.items()):
+                    #     if not torch.equal(param.detach().cpu(), saved_param.cpu()):
+                    #         equal = False
+                    #         print(f"Differenza trovata nel parametro: {name}")
+                    #         # Confronto vettore per vettore nel tensore
+                    #         for i in range(param.numel()):  # numel() restituisce il numero totale di elementi nel tensore
+                    #             if param.view(-1)[i] != saved_param.view(-1)[i]:
+                    #                 print(
+                    #                     f"Valore differente in posizione {i}: {param.view(-1)[i]} vs {saved_param.view(-1)[i]}")
+                    #                 break  # Esce dal loop se trova una differenza
+
+                    if equal:
+                        print("Tutti i pesi sono identici!")
+                    else:
+                        print("Ci sono differenze nei pesi!")
+
+
+                file_path = "./model/data/test_walks/final_embeddings.pkl"
+
+                # Save the embeddings
+                if not os.path.exists(file_path):
+                    with open(file_path, "wb") as f:
+                        pickle.dump(final_embeddings.detach().cpu(), f)
+                else:
+                    embs = pickle.load(open(file_path, "rb"))
+                    equal = torch.equal(final_embeddings.detach().cpu(), embs.detach().cpu())
+                    # print("Sono identici:", equal)
+                    # for i in range(final_embeddings.shape[0]):
+                        # equal = torch.allclose(final_embeddings.detach().cpu()[i], embs.detach().cpu()[i], atol=1e-3)
+                        # torch.equal(final_embeddings.detach().cpu()[i], embs.detach().cpu()[i])
+                        #if not equal:
+
+                            # print(f"Vettore {i} diverso!")
+                            #
+                            # print("Final_embeddings:", final_embeddings[i])
+                            # print("Embs:", embs[i])
+                            # indices_diff = (final_embeddings.detach().cpu()[i] != embs.detach().cpu()[i]).nonzero(as_tuple=True)[0]
+                            #
+                            # # Visualizza gli indici e i valori diversi
+                            # for idx in indices_diff:
+                            #     print(
+                            #         f"Indice {idx.item()}: Final_embeddings = {final_embeddings.detach().cpu()[i][idx].item()}, Embs = {embs.detach().cpu()[i][idx].item()}")
+                            # break
+                #print(final_embeddings[0:3])
+                # Calcola il prodotto scalare tra gli embeddings normalizzati
+                pub_embeddings = F.normalize(final_embeddings[pos_source_indices], p=2, dim=1)
+                data_embeddings = F.normalize(final_embeddings[pos_target_indices], p=2, dim=1)
+                #print(pub_embeddings[10:30])
+                #print(data_embeddings[10:30])
+                final_matrix = torch.mm(pub_embeddings, data_embeddings.t())
+                #final_matrix = torch.sigmoid(final_matrix)
+                #print(final_matrix)
+                top_values, top_indices = torch.topk(final_matrix, k=10, dim=1)
+                #print(top_values)
+                y_test_predicted_labels_norerank = {source: [] for source in sources}
+                for i, lista in enumerate(top_indices.tolist()):
+                    y_test_predicted_labels_norerank[sources[i]] = lista[0:10]
+
+
+
+                precisions,recalls,ndcgs = [],[],[]
+
+                # LINK PREDICTION
+                y_true_test = np.array([1] * test_positive_pd_edges.size(1) + [0] * test_negative_pd_edges.size(1))
+                all_walks = {seed: [] for seed in self.walker.G.nodes if
+                             self.walker.is_publication(seed) or self.walker.is_dataset(seed)}
+
+                for walk in walks:
+                    all_walks[walk[0]].append(walk)
+
+                all_walks = {k: v for k, v in all_walks.items() if len(v) > 0}
+                if self.args.lp:
                     loss, final_embeddings, pos_source, pos_target, neg_source, neg_target, all_seeds = self.run_minibatch_transductive(
                         self.dataset, 0,
                         test_positive_pd_edges, test_negative_pd_edges,
@@ -322,218 +486,86 @@ class Trainer:
                     neg_embeddings_target = neg_embeddings_target_ori.view(neg_embeddings_target_ori.size(0),
                                                                            neg_embeddings_target_ori.size(1),
                                                                            1)  # [batch_size, embed_d, 1]
+                    if args.core_aggregation == 'mh-attention':
+                        pos_embeddings_source = F.normalize(pos_embeddings_source, p=2, dim=-1)
+                        pos_embeddings_target = F.normalize(pos_embeddings_target, p=2, dim=-1)
+
+                        neg_embeddings_source = F.normalize(neg_embeddings_source, p=2, dim=-1)
+                        neg_embeddings_target = F.normalize(neg_embeddings_target, p=2, dim=-1)
 
                     result_positive_matrix = torch.bmm(pos_embeddings_source, pos_embeddings_target)
                     result_positive_matrix = torch.sigmoid(result_positive_matrix)
+
+
+
                     result_negative_matrix = torch.bmm(neg_embeddings_source, neg_embeddings_target)
                     result_negative_matrix = torch.sigmoid(result_negative_matrix)
 
                     y_predicted_test = torch.cat([result_positive_matrix.squeeze(), result_negative_matrix.squeeze()])
                     y_predicted_test = y_predicted_test.detach().cpu().numpy()
+
+
+
+
                     auc = roc_auc_score(y_true_test, y_predicted_test)
+                    auc_tot += auc
                     ap = average_precision_score(y_true_test, y_predicted_test)
-                    print('Link Prediction Test')
+                    ap_tot += ap
+                    threshold = args.f1_threshold
+                    y_pred = [1 if score >= threshold else 0 for score in y_predicted_test]
+                    f1 = f1_score(y_true_test, y_pred)
+                    f1_tot += f1
+                    print('Link Prediction Test\n')
                     print('AUC = {}'.format(auc))
                     print('AP = {}'.format(ap))
+                    print('F1 = {}\n\n'.format(f1))
 
+                if self.args.rec:
                     for topk in [1, 5, 10]:
+                        precision, no_rer_precision = 0, 0
+                        recall, no_rer_recall = 0, 0
+                        ndcg, no_rer_ndcg = 0, 0
                         for source in sources:
+                            #print(source)
                             true = self.y_test_true_labels[source]
-                            # pred = y_test_predicted_labels[source][:self.args.topk]
-                            # print(true)
-                            # print(pred)
-
-                            # for p in pred:
-                            #     run.append(f'{self.dataset["publication"].rev_mapping[source]}\tQ0\t{self.dataset["dataset"].rev_mapping[p]}\t{pred.index(p)+1}\t{pred.index(p)+1}\tmyrun\n')
+                            #print(true)
                             pred_nonrer = y_test_predicted_labels_norerank[source][:topk]
-                            # precision += len(list(set(pred).intersection(true))) / self.args.topk
+                            # print(pred_nonrer)
+                            # print('\n\n')
                             no_rer_precision += len(list(set(pred_nonrer).intersection(true))) / topk
-                            # recall += len(list(set(pred).intersection(true))) / len(true)
                             no_rer_recall += len(list(set(pred_nonrer).intersection(true))) / len(true)
-                            # ndcg += ndcg_at_k(true, pred, self.args.topk)
                             no_rer_ndcg += ndcg_at_k(true, pred_nonrer, topk)
 
-                        print('NO RERANKING')
+                        print(f'results {topk}')
                         print(no_rer_precision / len(sources))
                         print(no_rer_recall / len(sources))
                         print(no_rer_ndcg / len(sources))
-                        no_rer_precision, no_rer_recall, no_rer_ndcg = no_rer_precision / len(
-                            sources), no_rer_recall / len(
-                            sources), no_rer_ndcg / len(sources)
-                        if topk == 5:
-                            prec_tot += no_rer_precision
-                            rec_tot += no_rer_recall
-                            ndcg_tot += no_rer_ndcg
-                            auc_tot += auc
-                            ap_tot += ap
-                        f.write(f'\ntype {type}')
-                        reranking_line = '\niteration ={}'.format(str(iter)) + '\ntopk ={}'.format(
-                            str(topk)) + '\nAP ={}'.format(ap) + ' AUC ={}'.format(
-                            auc) + '\n' + 'STANDARD precision = {}'.format(no_rer_precision) + ' recall = {}'.format(
-                            no_rer_recall) + ' ndcg = {}'.format(no_rer_ndcg) + '\n\n'
-                        f.write(reranking_line)
+                        precisions.append(no_rer_precision / len(sources))
+                        recalls.append(no_rer_recall / len(sources))
+                        ndcgs.append(no_rer_ndcg / len(sources))
 
-                prec_tot = prec_tot / range_s
-                rec_tot = rec_tot / range_s
-                ndcg_tot = ndcg_tot / range_s
-                auc_tot = auc_tot / range_s
-                ap_tot = ap_tot / range_s
-                
-                f.write(f'\ntype {type}')
-                reranking_line = 'TOTALE RUNS AP ={}'.format(ap_tot) + 'AUC ={}'.format(
-                    auc_tot) + '\n' + 'STANDARD precision = {}'.format(prec_tot) + ' recall = {}'.format(
-                    rec_tot) + ' ndcg = {}'.format(ndcg_tot) + '\n'
-                print(reranking_line)
-                f.write(reranking_line)
-                f.close()
-            else:
-                # LINK PREDICTION
-                y_true_test = np.array([1] * test_positive_pd_edges.size(1) + [0] * test_negative_pd_edges.size(1))
-                all_walks = None
-                if os.path.exists(f'./model/data/test_walks/{self.args.dataset}_best_test_paths.txt'):
-                    g = open(f'./model/data/test_walks/{self.args.dataset}_best_test_paths.txt', 'r')
-                    all_walks = g.readlines()
-                    walks = [w.split() for w in all_walks]
-                    all_walks = {seed: [] for seed in self.walker.G.nodes if
-                                 self.walker.is_publication(seed) or self.walker.is_dataset(seed)}
 
-                    for walk in walks:
-                        all_walks[walk[0]].append(walk)
-                    all_walks = {k: v for k, v in all_walks.items() if len(v) > 0}
 
-                loss, final_embeddings, pos_source, pos_target, neg_source, neg_target, all_seeds = self.run_minibatch_transductive(
-                    self.dataset, 0,
-                    test_positive_pd_edges, test_negative_pd_edges,
-                    test=True, all_walks=all_walks)
+            # f.write(f'\ntype\n {type}')
+            # f.write('LINK PREDICTION\n')
+            # f.write(f"AUC {auc}\n")
+            # f.write(f"AP {ap}\n")
+            # f.write(f"F1 {f1}\n\n")
+            # f.write('RECOMMENDATION\n')
+            # f.write('top 1\n')
+            # f.write(f"precision {precisions[0]}\n")
+            # f.write(f"recall {recalls[0]}\n")
+            # f.write(f"nDCG {ndcgs[0]}\n")
+            # f.write('top 5\n')
+            # f.write(f"precision {precisions[1]}\n")
+            # f.write(f"recall {recalls[1]}\n")
+            # f.write(f"nDCG {ndcgs[1]}\n")
+            # f.write('top 10\n')
+            # f.write(f"precision {precisions[2]}\n")
+            # f.write(f"recall {recalls[2]}\n")
+            # f.write(f"nDCG {ndcgs[2]}\n")
+            # f.close()
 
-                pos_embeddings_source_ori, neg_embeddings_source_ori = final_embeddings[pos_source], final_embeddings[
-                    neg_source]
-                pos_embeddings_target_ori, neg_embeddings_target_ori = final_embeddings[pos_target], final_embeddings[
-                    neg_target]
-
-                pos_embeddings_source = pos_embeddings_source_ori.view(pos_embeddings_source_ori.size(0), 1,
-                                                                       pos_embeddings_source_ori.size(
-                                                                           1))  # [batch_size, 1, embed_d]
-                neg_embeddings_source = neg_embeddings_source_ori.view(neg_embeddings_source_ori.size(0), 1,
-                                                                       neg_embeddings_source_ori.size(
-                                                                           1))  # [batch_size, 1, embed_d]
-                pos_embeddings_target = pos_embeddings_target_ori.view(pos_embeddings_target_ori.size(0),
-                                                                       pos_embeddings_target_ori.size(1),
-                                                                       1)  # [batch_size, embed_d, 1]
-                neg_embeddings_target = neg_embeddings_target_ori.view(neg_embeddings_target_ori.size(0),
-                                                                       neg_embeddings_target_ori.size(1),
-                                                                       1)  # [batch_size, embed_d, 1]
-
-                result_positive_matrix = torch.bmm(pos_embeddings_source, pos_embeddings_target)
-                result_positive_matrix = torch.sigmoid(result_positive_matrix)
-                result_negative_matrix = torch.bmm(neg_embeddings_source, neg_embeddings_target)
-                result_negative_matrix = torch.sigmoid(result_negative_matrix)
-
-                y_predicted_test = torch.cat([result_positive_matrix.squeeze(), result_negative_matrix.squeeze()])
-                y_predicted_test = y_predicted_test.detach().cpu().numpy()
-                auc = roc_auc_score(y_true_test, y_predicted_test)
-                ap = average_precision_score(y_true_test, y_predicted_test)
-                print('Link Prediction Test')
-                print('AUC = {}'.format(auc))
-                print('AP = {}'.format(ap))
-
-                sources = list(self.y_test_true_labels.keys())
-                datasets = list(self.dataset['dataset'].mapping.keys())
-                pos_source = [self.dataset['publication'].rev_mapping[j] for j in sources]
-                # print(pos_source)
-                all_seeds = pos_source + datasets
-                ff = open(f'./model/data/test_walks/{self.args.dataset}_best_test_paths.txt', 'r')
-                all_walks = ff.readlines()
-                walks = [w.split() for w in all_walks]
-                self.walker.set_seeds(all_seeds)
-                all_walks = {seed: [] for seed in self.walker.G.nodes if
-                             self.walker.is_publication(seed) or self.walker.is_dataset(seed)}
-                for walk in walks:
-                    all_walks[walk[0]].append(walk)
-                all_walks = {k: v for k, v in all_walks.items() if len(v) > 0}
-                all_walks = [v for k, v in all_walks.items() if k in all_seeds]
-                all_walks = [inner for outer in all_walks for inner in outer]
-
-                selected_seeds_walks, selected_seeds_cores, selected_seeds_hubs_key, selected_seeds_hubs_top = self.walker.select_walks_mp(
-                    all_walks)
-                seed_vectors, seed_vectors_net, net_cores, cores, net_keys, keys, hubs, _, _, _, _, _, _, _, _ = self.walker.get_neighbours_vector(
-                    selected_seeds_cores,
-                    selected_seeds_hubs_key,
-                    selected_seeds_hubs_top)
-
-                pos_source_indices = [all_seeds.index(j) for i, j in enumerate(pos_source)]
-                pos_target_indices = [all_seeds.index(j) for i, j in enumerate(datasets)]
-
-                final_embeddings = self.model(seed_vectors, seed_vectors_net, net_cores, cores, net_keys, keys, hubs,
-                                              core_agg=self.args.core_aggregation,
-                                              key_agg=self.args.key_aggregation, top_agg=self.args.top_aggregation,
-                                              all_agg=self.args.all_aggregation)
-
-                # Calcola il prodotto scalare tra gli embeddings normalizzati
-                pub_embeddings = F.normalize(final_embeddings[pos_source_indices], p=2, dim=1)
-                data_embeddings = F.normalize(final_embeddings[pos_target_indices], p=2, dim=1)
-                final_matrix = torch.mm(pub_embeddings, data_embeddings.t())
-                print(f'final matrix shape {final_matrix.shape}')
-                final_matrix_filtered = torch.mm(pub_embeddings, data_embeddings.t())
-                print(f'final matrix shape {final_matrix_filtered.shape}')
-
-                top_values, top_indices = torch.topk(final_matrix, k=len(datasets), dim=1)
-
-                y_test_predicted_labels_norerank = {source: [] for source in sources}
-                # mapped_results = self.trivial_baselines()
-                for i, lista in enumerate(top_indices.tolist()):
-                    y_test_predicted_labels_norerank[sources[i]] = lista[0:self.args.topk]
-
-                for topk in [1, 5, 10]:
-                    precision, no_rer_precision = 0, 0
-                    recall, no_rer_recall = 0, 0
-                    ndcg, no_rer_ndcg = 0, 0
-                    run = []
-                    print(len(sources))
-
-                    for source in sources:
-                        true = self.y_test_true_labels[source]
-                        # pred = y_test_predicted_labels[source][:self.args.topk]
-                        # print(true)
-                        # print(pred)
-
-                        # for p in pred:
-                        #     run.append(f'{self.dataset["publication"].rev_mapping[source]}\tQ0\t{self.dataset["dataset"].rev_mapping[p]}\t{pred.index(p)+1}\t{pred.index(p)+1}\tmyrun\n')
-                        pred_nonrer = y_test_predicted_labels_norerank[source][:topk]
-                        # precision += len(list(set(pred).intersection(true))) / self.args.topk
-                        no_rer_precision += len(list(set(pred_nonrer).intersection(true))) / topk
-                        # recall += len(list(set(pred).intersection(true))) / len(true)
-                        no_rer_recall += len(list(set(pred_nonrer).intersection(true))) / len(true)
-                        # ndcg += ndcg_at_k(true, pred, self.args.topk)
-                        no_rer_ndcg += ndcg_at_k(true, pred_nonrer, topk)
-
-                    print(f'NO RERANKING topk {topk}')
-                    print(no_rer_precision / len(sources))
-                    print(no_rer_recall / len(sources))
-                    print(no_rer_ndcg / len(sources))
-                    no_rer_precision, no_rer_recall, no_rer_ndcg = no_rer_precision / len(sources), no_rer_recall / len(
-                        sources), no_rer_ndcg / len(sources)
-
-                    reranking_line = '\n topk ={}'.format(str(topk)) + '\nAP ={}'.format(ap) + 'AUC ={}'.format(
-                        auc) + '\n' + 'STANDARD precision = {}'.format(no_rer_precision) + ' recall = {}'.format(
-                        no_rer_recall) + ' ndcg = {}'.format(no_rer_ndcg) + '\n\n'
-                    f.write(reranking_line)
-
-            # prec_tot = prec_tot / 10
-            # rec_tot = rec_tot / 10
-            # ndcg_tot = ndcg_tot / 10
-            # auc_tot = auc_tot / 10
-            # ap_tot = ap_tot / 10
-            #
-            # reranking_line = 'TOTALE RUNS AP ={}'.format(ap_tot) + 'AUC ={}'.format(
-            #     auc_tot) + '\n' + 'STANDARD precision = {}'.format(prec_tot) + ' recall = {}'.format(
-            #     rec_tot) + ' ndcg = {}'.format(ndcg_tot) + '\n'
-            # print(reranking_line)
-            # f.write(reranking_line)
-            #
-            # for r in run:
-            #     f.write(r)
-            f.close()
 
     def run_minibatch_transductive(self, dataset, iteration, positive_edges, negative_edges, test=False,
                                    all_walks=None):
@@ -586,19 +618,36 @@ class Trainer:
 
         selected_seeds_walks, selected_seeds_cores, selected_seeds_hubs_key, selected_seeds_hubs_top = self.walker.select_walks_mp(
             all_walks)
-        seed_vectors, seed_vectors_net, net_cores, cores, net_keys, keys, hubs, _, _, _, _, _, _, _, _ = self.walker.get_neighbours_vector(
+        seed_vectors, seed_vectors_net, net_cores, cores, net_keys, keys, net_hubs,hubs, _, _, _, _, _, _, _, _ = self.walker.get_neighbours_vector(
             selected_seeds_cores, selected_seeds_hubs_key, selected_seeds_hubs_top)
-        final_embeddings = self.model(seed_vectors, seed_vectors_net, net_cores, cores, net_keys, keys, hubs,
+        final_embeddings = self.model(seed_vectors, seed_vectors_net, net_cores, cores, net_keys, keys, net_hubs,hubs,
                                       core_agg=self.args.core_aggregation, key_agg=self.args.key_aggregation,
                                       top_agg=self.args.top_aggregation, all_agg=self.args.all_aggregation)
-        loss = self.model.cross_entropy_loss(final_embeddings, pos_source_indices, pos_target_indices,
+        # print(final_embeddings.shape)
+        # print(pos_source_indices)
+        # print(pos_target_indices)
+        # print(neg_source_indices)
+        # print(neg_target_indices)
+
+        if args.loss == 'bpr':
+            loss = self.model.BPRloss(final_embeddings, pos_source_indices, pos_target_indices,
+                                             neg_source_indices, neg_target_indices)
+        elif args.loss == 'kl':
+            print('loss kl')
+            loss = self.model.kl_divergence_loss(final_embeddings, pos_source_indices, pos_target_indices,
+                                         neg_source_indices, neg_target_indices)
+        elif args.loss == 'binaryloss':
+            loss = self.model.binary_cross_entropy_loss(final_embeddings, pos_source_indices, pos_target_indices,
+                                         neg_source_indices, neg_target_indices)
+        else:
+            loss = self.model.cross_entropy_loss(final_embeddings, pos_source_indices, pos_target_indices,
                                              neg_source_indices, neg_target_indices)
         if test:
             return loss, final_embeddings, pos_source_indices, pos_target_indices, neg_source_indices, neg_target_indices, all_seeds
         else:
             return loss, final_embeddings
 
-    def run_transductive(self,type):
+    def run_transductive(self,type='trans'):
 
         """
         CASE 1: validation and test sets connect nodes already seen in training set
@@ -617,11 +666,11 @@ class Trainer:
         edge_label_index_test = self.dataset['publication', 'cites', 'dataset'].edge_label_index_test_trans
         test_negative_pd_edges = self.dataset['publication', 'cites', 'dataset'].negative_edge_label_index_test_trans
 
-        if type == 'semi':
+        if type == 'light':
             edge_label_index_test = self.dataset['publication', 'cites', 'dataset'].edge_label_index_test_semi
             test_negative_pd_edges = self.dataset['publication', 'cites', 'dataset'].negative_edge_label_index_test_semi
 
-        elif type == 'ind':
+        elif type == 'full':
             edge_label_index_test = self.dataset['publication', 'cites', 'dataset'].edge_label_index_test_ind
             test_negative_pd_edges = self.dataset['publication', 'cites', 'dataset'].negative_edge_label_index_test_ind
 
@@ -643,48 +692,55 @@ class Trainer:
             y_test_true_labels[source].append(target)
 
         self.y_test_true_labels = {k: y_test_true_labels[k] for k in sorted(list(y_test_true_labels.keys()))}
+        print(f'true labels: {self.y_test_true_labels}')
 
-        stringa = f'lr-{self.args.lr}_heads-{self.args.heads}_batch-{self.args.batch_size}_cores-{self.args.n_cores}_key-{self.args.n_keys_hubs}_top-{self.args.n_top_hubs}_aggrcore-{self.args.core_aggregation}_aggrkeys-{self.args.key_aggregation}_aggrtop-{self.args.top_aggregation}_allagg-{self.args.all_aggregation}'
+        stringa = f'lr-{self.args.lr}_heads-{self.args.heads}_batch-{self.args.batch_size}_cores-{self.args.n_cores}_key-{self.args.n_keys_hubs}_top-{self.args.n_top_hubs}_aggrcore-{self.args.core_aggregation}_aggrkeys-{self.args.key_aggregation}_aggrtop-{self.args.top_aggregation}_allagg-{self.args.all_aggregation}_loss-{args.loss}'
+
         stringa = 'unique_' + self.args.dataset + '_' + stringa
-        if self.args.no_metadata:
-            stringa = 'NO_METADATA_unique_' + stringa
+        if self.args.no_aug:
+            stringa = 'no_aug_unique_' + stringa
 
         save_epoch_path = f'./model/checkpoint/transductive/models/{self.args.dataset}/{self.args.enriched}/unique_last_checkpoint_{stringa}_last_epoch.pt'
         save_early_path = f'./model/checkpoint/transductive/models/{self.args.dataset}/{self.args.enriched}/unique_best_checkpoint_{stringa}.pt'
-        if self.args.eval_lr:
+        if self.args.eval_lr :
+            folder_path = f'./model/checkpoint/transductive/models/{self.args.dataset}/ablation/lr_{self.args.lr}'
+            os.makedirs(folder_path, exist_ok=True)
+
             save_epoch_path = f'./model/checkpoint/transductive/models/{self.args.dataset}/ablation/lr_{self.args.lr}/checkpoint_{stringa}_last_epoch.pt'
             save_early_path = f'./model/checkpoint/transductive/models/{self.args.dataset}/ablation/lr_{self.args.lr}/checkpoint_{stringa}.pt'
-        elif self.args.eval_batch:
+        elif self.args.eval_batch :
+            folder_path = f'./model/checkpoint/transductive/models/{self.args.dataset}/ablation/batch_{self.args.batch_size}'
+            os.makedirs(folder_path, exist_ok=True)
             save_epoch_path = f'./model/checkpoint/transductive/models/{self.args.dataset}/ablation/batch_{self.args.batch_size}/checkpoint_{stringa}_last_epoch.pt'
             save_early_path = f'./model/checkpoint/transductive/models/{self.args.dataset}/ablation/batch_{self.args.batch_size}/checkpoint_{stringa}.pt'
-        elif self.args.eval_combine_aggregation:
+        elif self.args.eval_combine_aggregation :
+            folder_path = f'./model/checkpoint/transductive/models/{self.args.dataset}/ablation/aggr_all_{self.args.all_aggregation}'
+            os.makedirs(folder_path, exist_ok=True)
             save_early_path = f'./model/checkpoint/transductive/models/{self.args.dataset}/ablation/aggr_all_{self.args.all_aggregation}/checkpoint_{stringa}.pt'
             save_epoch_path = f'./model/checkpoint/transductive/models/{self.args.dataset}/ablation/aggr_all_{self.args.all_aggregation}/checkpoint_{stringa}_last_epoch.pt'
-        elif self.args.eval_aggregation:
+        elif self.args.eval_aggregation :
+            folder_path = f'./model/checkpoint/transductive/models/{self.args.dataset}/ablation/aggr_{self.args.core_aggregation}'
+            os.makedirs(folder_path, exist_ok=True)
             save_epoch_path = f'./model/checkpoint/transductive/models/{self.args.dataset}/ablation/aggr_{self.args.core_aggregation}/checkpoint_{stringa}_last_epoch.pt'
             save_early_path = f'./model/checkpoint/transductive/models/{self.args.dataset}/ablation/aggr_{self.args.core_aggregation}/checkpoint_{stringa}.pt'
-        elif self.args.eval_neigh:
+        elif self.args.eval_neigh :
+            folder_path = f'./model/checkpoint/transductive/models/{self.args.dataset}/ablation/neigh_{self.args.n_cores}_{self.args.n_keys_hubs}_{self.args.n_top_hubs}'
+            os.makedirs(folder_path, exist_ok=True)
             save_epoch_path = f'./model/checkpoint/transductive/models/{self.args.dataset}/ablation/neigh_{self.args.n_cores}_{self.args.n_keys_hubs}_{self.args.n_top_hubs}/checkpoint_{stringa}_last_epoch.pt'
             save_early_path = f'./model/checkpoint/transductive/models/{self.args.dataset}/ablation/neigh_{self.args.n_cores}_{self.args.n_keys_hubs}_{self.args.n_top_hubs}/checkpoint_{stringa}.pt'
         elif self.args.eval_heads:
+            folder_path = f'./model/checkpoint/transductive/models/{self.args.dataset}/ablation/heads_{self.args.heads}'
+            os.makedirs(folder_path, exist_ok=True)
             save_epoch_path = f'./model/checkpoint/transductive/models/{self.args.dataset}/ablation/heads_{self.args.heads}/checkpoint_{stringa}_last_epoch.pt'
             save_early_path = f'./model/checkpoint/transductive/models/{self.args.dataset}/ablation/heads_{self.args.heads}/checkpoint_{stringa}.pt'
 
         early_stopping = EarlyStoppingClass(patience=args.patience, verbose=True, save_epoch_path=save_epoch_path,
-                                            save_early_path=save_early_path)
+                                            save_early_path=save_epoch_path)
         epochs = -1
         print(os.path.exists(save_epoch_path))
-        if args.heads == 10:
-            m = 'san'
-            if args.hetgnn:
-                m = 'hetgnn'
-            # mh - attention_aggrkeys - mh - attention_aggrtop - mh - attention_allagg - concat_last_epoch_epoch_99.pt
-            save_epoch_path = f'./model/checkpoint/transductive/models/{self.args.dataset}/enriched_all/{m}/metadata/last_checkpoint_{stringa}_last_epoch_epoch_149.pt'
-            if args.no_metadata:
-                save_epoch_path = f'./model/checkpoint/transductive/models/{self.args.dataset}/enriched_all/{m}/no_metadata/last_checkpoint_{stringa}_last_epoch_epoch_149.pt'
-        print(save_epoch_path)
+
         #save_epoch_path = f'./model/checkpoint/transductive/models/{self.args.dataset}/enriched_all/unique_last_checkpoint_unique_mes_lr-1e-05_heads-8_batch-1024_cores-5_key-5_top-5_aggrcore-mh-attention_aggrkeys-mh-attention_aggrtop-mh-attention_allagg-concat_last_epoch_epoch_99.pt'
-        if os.path.exists(save_epoch_path) and not self.args.restart:
+        if os.path.exists(save_epoch_path) and (not self.args.restart or self.args.test):
             print('LOADING')
 
             # path = save_epoch_path
@@ -699,6 +755,7 @@ class Trainer:
             # print(f'STARTING FROM: epoch {epochs}')
             print(f'path: {save_epoch_path}')
             checkpoint = torch.load(save_epoch_path)
+
             try:
                 self.model.load_state_dict(checkpoint['model_state_dict'])
                 self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -712,9 +769,9 @@ class Trainer:
                 self.model.load_state_dict(checkpoint)
         else:
             print('NEW TRAINING STARTED')
-        # epochs = 0
 
-        if self.args.train:
+
+        if self.args.train and not self.args.test:
             for epoch in tqdm.tqdm(range(epochs + 1, self.args.epochs), desc="Epoch"):
                 # random shuffle before mini-batch training
                 t_start = time.time()
@@ -769,56 +826,65 @@ class Trainer:
                         print('Early stopping!')
                         break
 
-        if not self.args.train:
+        if self.args.test:
             self.model.eval()
             with torch.no_grad():
-                stringa = f'lr-{self.args.lr}_heads-{self.args.heads}_batch-{self.args.batch_size}_cores-{self.args.n_cores}_key-{self.args.n_keys_hubs}_top-{self.args.n_top_hubs}_aggrcore-{self.args.core_aggregation}_aggrkeys-{self.args.key_aggregation}_aggrtop-{self.args.top_aggregation}_allagg-{self.args.all_aggregation}'
+                stringa = f'lr-{self.args.lr}_heads-{self.args.heads}_batch-{self.args.batch_size}_cores-{self.args.n_cores}_key-{self.args.n_keys_hubs}_top-{self.args.n_top_hubs}_aggrcore-{self.args.core_aggregation}_aggrkeys-{self.args.key_aggregation}_aggrtop-{self.args.top_aggregation}_allagg-{self.args.all_aggregation}_loss-{args.loss}'
                 stringa = 'unique_' + self.args.dataset + '_' + stringa
-                if args.no_metadata:
-                    stringa = 'NO_METADATA_unique_' + stringa
+                if args.no_aug:
+                    stringa = 'no_aug_unique_' + stringa
 
                 self.test(test_positive_pd_edges, test_negative_pd_edges, 'testepoch', stringa,type=type)
 
 
+
+
 if __name__ == '__main__':
     args = get_args()
+    seed_torch()
+    # print("------arguments-------")
+    # for k, v in vars(args).items():
+    #     print(k + ': ' + str(v))
 
-    print("------arguments-------")
-    for k, v in vars(args).items():
-        print(k + ': ' + str(v))
 
-    # fix random seed
-    # random.seed(args.random_seed)
-    # np.random.seed(args.random_seed)
-    # torch.manual_seed(args.random_seed)
-    # torch.cuda.manual_seed_all(args.random_seed)
-    # seed_everything()
-    # seed_torch(args.random_seed)
     # model - ABLATION
     args = get_args()
-    seed_torch(args.random_seed)
-    if args.eval_lr or args.eval_all:
-        args.eval_lr = True
-        for lr in [0.00005, 0.00001, 0.0001, 0.001]:
-            args.lr = lr
+    if args.eval_neigh or args.eval_all:
+        args.eval_neigh = True
+        for lr in [(12, 12, 10), (3, 3, 3), (8, 8, 5)]:
+            args.n_cores = lr[0]
+            args.n_keys_hubs = lr[1]
+            args.n_top_hubs = lr[2]
             trainer = Trainer(args)
             trainer.run_transductive(type='trans')
-
-    args = get_args()
-    seed_torch(args.random_seed)
-    if args.eval_lr or args.eval_all:
-        for lr in ['enriched', 'enriched_all', 'standard']:
-            args.enriched = lr
-            trainer = Trainer(args)
-            trainer.run_transductive(type='trans')
+            # args.test = True
+            # trainer = Trainer(args)
+            # trainer.run_transductive(type='trans')
 
     args = get_args()
     if args.eval_heads or args.eval_all:
         args.eval_heads = True
-        for lr in [1, 2, 4, 8, 16]:
+        for lr in [1,2,4,8,16]:
             args.heads = lr
             trainer = Trainer(args)
             trainer.run_transductive(type='trans')
+            # args.test = True
+            # trainer = Trainer(args)
+            # trainer.run_transductive(type='trans')
+
+
+    args = get_args()
+    seed_torch(args.random_seed)
+    if args.eval_lr or args.eval_all:
+        args.eval_lr = True
+        for lr in [0.0001,0.00001,0.00005,0.001]:
+            args.lr = lr
+            trainer = Trainer(args)
+            trainer.run_transductive(type='trans')
+            # args.test = True
+            # trainer = Trainer(args)
+            # trainer.run_transductive(type='trans')
+
 
     args = get_args()
     if args.eval_batch or args.eval_all:
@@ -827,96 +893,77 @@ if __name__ == '__main__':
         for lr in lrs:
             args.batch_size = lr
             trainer = Trainer(args)
-            trainer.run_transductive()
+            trainer.run_transductive(type='trans')
+            # args.test = True
+            # trainer = Trainer(args)
+            # trainer.run_transductive(type='trans')
 
     args = get_args()
     if args.eval_aggregation or args.eval_all:
+
         args.eval_aggregation = True
-        for lr in ['mh-attention', 'lstm']:
+        for lr in ['gru', 'lstm','linear','mh-attention']:
+            print('AGGREGATION: ',lr)
             args.core_aggregation = lr
             args.key_aggregation = lr
             args.top_aggregation = lr
             trainer = Trainer(args)
             trainer.run_transductive(type='trans')
+            # args.test = True
+            # trainer = Trainer(args)
+            # trainer.run_transductive(type='trans')
+
 
     args = get_args()
     if args.eval_combine_aggregation or args.eval_all:
         args.eval_combine_aggregation = True
-        for lr in ['mh-attention', 'lstm', 'mean', 'concat']:
+        for lr in ['mh-attention','gru', 'lstm', 'mean']:
             args.all_aggregation = lr
             trainer = Trainer(args)
             trainer.run_transductive(type='trans')
+            # args.test = True
+            # trainer = Trainer(args)
+            # trainer.run_transductive(type='trans')
 
-    args = get_args()
-    if args.eval_neigh or args.eval_all:
-        args.eval_neigh = True
-        for lr in [(12, 12, 10), (5, 5, 5), (3, 3, 3), (8, 8, 5)]:
-            args.n_cores = lr[0]
-            if lr[0] > 5:
-                args.split_cores = False
-            else:
-                args.split_cores = True
-            args.n_keys_hubs = lr[1]
-            args.n_top_hubs = lr[2]
-            trainer = Trainer(args)
-            trainer.run_transductive()
-    else:
-        if args.hetgnn and args.train:
-            # hetgnn
+
+
+
+
+    # if args.hetgnn and args.train:
+    #     # hetgnn
+    #     args = get_args()
+    #     args.epochs = 100
+    #     args.batch_size = 1024
+    #     args.core_aggregation = 'lstm'
+    #     args.key_aggregation = 'lstm'
+    #     args.top_aggregation = 'lstm'
+    #     args.all_aggregation = 'mh-attention'
+    #     args.heads = 1
+    #     trainer = Trainer(args)
+    #     trainer.run_transductive(type='trans')
+    #     if args.dataset =='mes' and args.no_metadata == False:
+    #         args.no_metadata = True
+    #         trainer = Trainer(args)
+    #         trainer.run_transductive(type='trans')
+
+    if args.train:
+        # losses = ["binarycross","crossentropy"]
+        # if args.dataset == 'pubmed':
+        #     losses = ['crossentropy']
+        # for loss in ['crossentropy']:
+        for dataset in ['pubmed']:
             args = get_args()
-            args.epochs = 100
-            args.batch_size = 1024
-            args.core_aggregation = 'lstm'
-            args.key_aggregation = 'lstm'
-            args.top_aggregation = 'lstm'
-            args.all_aggregation = 'mh-attention'
-            args.heads = 1
+            args.dataset = dataset
             trainer = Trainer(args)
             trainer.run_transductive(type='trans')
-            if args.dataset =='mes' and args.no_metadata == False:
-                args.no_metadata = True
-                trainer = Trainer(args)
-                trainer.run_transductive(type='trans')
-
-        elif args.train:
-            args = get_args()
-            trainer = Trainer(args)
-            trainer.run_transductive(type='trans')
-            if args.dataset =='mes' and args.no_metadata == False:
-                args.no_metadata = True
-                trainer = Trainer(args)
-                trainer.run_transductive(type='trans')
 
 
 
-        elif args.test:
+    elif args.test:
+        args = get_args()
+        trainer = Trainer(args)
+        type = args.inductive_type
+        trainer.run_transductive(type=type)
+        print('\n\n')
 
-            for dataset in ['mes','pubmed']:
-                for type in ['trans','semi','ind']:
-                    args = get_args()
-                    args.dataset = dataset
-                    if args.dataset == 'mes':
-                        args.num_random_walks = 100
-                    if not args.hetgnn:
-                        args.epochs = 200
-                        args.batch_size = 2048
-                        args.core_aggregation = 'mh-attention'
-                        args.key_aggregation = 'mh-attention'
-                        args.top_aggregation = 'mh-attention'
-                        args.all_aggregation = 'concat'
-                        args.beads = 8
-                    else:
-                        args.epochs = 100
-                        args.epochs = 1024
-                        args.core_aggregation = 'lstm'
-                        args.key_aggregation = 'lstm'
-                        args.top_aggregation = 'lstm'
-                        args.all_aggregation = 'mh-attention'
-                        args.heads = 1
-                    args.no_metadata = False
-                    trainer = Trainer(args)
-                    trainer.run_transductive(type=type)
-                    args.no_metadata = True
-                    trainer = Trainer(args)
-                    trainer.run_transductive(type=type)
 

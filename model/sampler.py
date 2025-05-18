@@ -18,20 +18,24 @@ import torch
 import random
 import multiprocessing
 import concurrent.futures
+from torch_geometric import seed_everything
 
 from multiprocessing import Pool
-seed = 42
-os.environ['PYTHONHASHSEED'] = str(seed)
-np.random.seed(seed)
-torch.manual_seed(seed)
-torch.cuda.manual_seed(seed)
-torch.cuda.manual_seed_all(seed)  # if you are using multi-GPU.
-torch.backends.cudnn.benchmark = False
-torch.backends.cudnn.deterministic = True
-# os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
-torch.use_deterministic_algorithms(True)
-os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
-torch.backends.cudnn.enabled = False
+def seed_torch(seed=42):
+    random.seed(seed)
+    seed_everything(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # if you are using multi-GPU.
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
+    torch.use_deterministic_algorithms(True)
+
+
+seed_torch()
 
 
 def cosine_similarity(emb1, emb2):
@@ -72,10 +76,9 @@ class RandomWalkWithRestart:
         self.alpha = args.restart_probability
 
         self.G = create_graph_csv(self.path_data, self.args.dataset, ['all'])
-        # print(f'total detected nodes {len(self.G.nodes())}')
-        # print(f'total detected edges {len(self.G.edges())}')
-        print('\n\neval p2\n\n')
-        print('p_30' in self.G.nodes())
+        
+
+
         # Filter edges based on the selected source and target nodes
         if 'transductive' in root:
             # rimuovo gli archi tra p e d, li aggiungo dopo dipendentemente da cosa mi serve
@@ -96,9 +99,14 @@ class RandomWalkWithRestart:
             edges_to_add = [
                 tuple([sch_dataset['publication'].rev_mapping[s[0]], sch_dataset['dataset'].rev_mapping[s[1]]]) for s in
                 edge_index.t().tolist()]
-
+            
+            
             self.G.remove_edges_from(edges_to_remove)
             self.G.add_edges_from(edges_to_add)
+
+
+            # edges_to_remove = [(u, v) for u, v in self.G.edges if v.startswith('tk')]
+            # self.G.remove_edges_from(edges_to_remove)
 
 
 
@@ -112,7 +120,6 @@ class RandomWalkWithRestart:
         sources = list(set(edge_index_test_ind[0].tolist() + edge_index_test_semi[0].tolist()))
         targets = list(set(edge_index_test_ind[1].tolist()))
 
-
         if not test:
             sources = [sch_dataset['publication'].rev_mapping[s] for s in sources]
             targets = [sch_dataset['dataset'].rev_mapping[s] for s in targets]
@@ -120,10 +127,43 @@ class RandomWalkWithRestart:
             self.G.remove_nodes_from(sources)
             self.G.remove_nodes_from(targets)
 
+        else:
+            if self.args.inductive_type == 'light':
+                print('light')
+                sources = list(set(edge_index_test_ind[0].tolist()))
+                targets = list(set(edge_index_test_ind[1].tolist()))
+                sources = [sch_dataset['publication'].rev_mapping[s] for s in sources]
+                targets = [sch_dataset['dataset'].rev_mapping[s] for s in targets]
+                self.removed = sources + targets
+                print(len(self.G.edges))
+                self.G.remove_edges_from(list(self.G.edges(self.removed)))
+                print(len(self.G.edges))
+
+                #self.G.remove_nodes_from(self.removed)
+                # self.G.remove_nodes_from(targets)
+
+            elif self.args.inductive_type =='trans':
+                print('trans')
+                sources = list(set(edge_index_test_ind[0].tolist() + edge_index_test_semi[0].tolist()))
+                targets = list(set(edge_index_test_ind[1].tolist()))
+                sources = [sch_dataset['publication'].rev_mapping[s] for s in sources]
+                targets = [sch_dataset['dataset'].rev_mapping[s] for s in targets]
+                self.removed = sources + targets
+                print(len(self.G.edges))
+                self.G.remove_edges_from(list(self.G.edges(self.removed)))
+                print(len(self.G.edges))
+
+                #self.G.remove_nodes_from(self.removed)
+                # self.G.remove_nodes_from(sources)
+                # self.G.remove_nodes_from(targets)
+
+
+
+
+
         self.G_conv = nx.convert_node_labels_to_integers(self.G)
         self.mapping = {j: i for j, i in zip(self.G_conv, self.G)}
         self.rev_mapping = {i: j for j, i in zip(self.G_conv, self.G)}
-
         self.publications_features, self.datasets_features = sch_dataset['publication'], sch_dataset['dataset']
         # self.publications_features,self.datasets_features = self.load_features()
 
@@ -152,7 +192,7 @@ class RandomWalkWithRestart:
         return self.seeds
 
     def reset_seeds(self):
-        self.seeds = False
+        self.seeds = []
 
     def create_random_walks(self, seeds_in=False, all=False):
         if all:
@@ -170,11 +210,11 @@ class RandomWalkWithRestart:
        # print(f'TEST JOIN {len(list(set(self.removed).intersection(self.G.nodes())))}')
         if seeds is not None:
             converted_seeds = [self.rev_mapping[x] for x in self.seeds]
-            walks = walker.random_walks(self.G_conv, n_walks=self.all_walks, alpha=0.1,
-                                        walk_len=self.args.max_walk_length, start_nodes=converted_seeds, q=0.1, p=0.3)
+            walks = walker.random_walks(self.G_conv, n_walks=self.all_walks, alpha=self.alpha,
+                                        walk_len=self.max_walk_length, start_nodes=converted_seeds, q=0.3, p=1.0)
         else:
             walks = walker.random_walks(self.G_conv, n_walks=self.all_walks, alpha=self.alpha,
-                                        walk_len=random.randint(1, self.max_walk_length), p=1.0, q=0.0)
+                                        walk_len=random.randint(1, self.max_walk_length), p=1.0, q=0.1)
         walks = sorted(walks, key=lambda x: x[0])
         walks_rev = []
         for walk in walks:
@@ -226,7 +266,7 @@ class RandomWalkWithRestart:
     def process_list(self,seeds_list):
         # Example function to process each sublist
         selected_walks_list, selected_cores_list, selected_hubs_top_list, selected_hubs_key_list = [],[],[],[]
-        print(f"Processing sublist of length {len(seeds_list)}")
+        #print(f"Processing sublist of length {len(seeds_list)}")
 
         # Replace this with the actual work you need to do on each sublist
         walk_importance_score = [[] for _ in range(len(seeds_list))]
@@ -285,6 +325,7 @@ class RandomWalkWithRestart:
                     cosine_total = 0
                 else:
                     cosine_total = cosine_total / len(cores_walk)
+
                 walk_importance_score[j].append(cosine_total)
                 cores[j].append(cores_walk)
                 hubs_top[j].append(hubs_top_walk)
@@ -293,37 +334,50 @@ class RandomWalkWithRestart:
             for index in range(self.args.num_selected_walks, self.args.num_random_walks):
                 selected_walks_ind = sorted(range(len(walk_importance_score[j])),
                                             key=lambda i: walk_importance_score[j][i], reverse=True)[:index]
-                #if self.args.hetgnn:
-                #    selected_walks_ind = [i for i in range(0,index)]
 
                 selected_walks = [cur_walks[i] for i in selected_walks_ind]
                 selected_cores = [cores[j][i] for i in selected_walks_ind]
-                selected_cores = list(set(item for sublist in selected_cores for item in sublist))
+                selected_cores = list(set(item for sublist in selected_cores for item in sublist if item != []))
+
 
                 selected_hubs_top = [hubs_top[j][i] for i in selected_walks_ind]
-                selected_hubs_top = list(set(item for sublist in selected_hubs_top for item in sublist))
+                selected_hubs_top = list(set(item for sublist in selected_hubs_top for item in sublist if item != []))
+
 
                 selected_hubs_key = [hubs_key[j][i] for i in selected_walks_ind]
-                selected_hubs_key = list(set(item for sublist in selected_hubs_key for item in sublist))
+                selected_hubs_key = list(set(item for sublist in selected_hubs_key for item in sublist if item != []))
+
+                if self.args.test == False:
+                    unique_key_elements = {}
+                    for tup in selected_hubs_key:
+                            if tup[0] not in unique_key_elements:
+                                unique_key_elements[tup[0]] = tup[1]
+
+                    selected_hubs_key = [tuple([k,v]) for k,v in unique_key_elements.items()]
+                    unique_top_elements = {}
+                    for tup in selected_hubs_top:
+                            if tup[0] not in unique_top_elements:
+                                unique_top_elements[tup[0]] = tup[1]
+                    selected_hubs_top = [tuple([k,v]) for k,v in unique_top_elements.items()]
+
+                    unique_core_elements = {}
+                    for tup in selected_cores:
+                            if tup[0] not in unique_core_elements:
+                                unique_core_elements[tup[0]] = tup[1]
+                    selected_cores = [tuple([k,v]) for k,v in unique_core_elements.items()]
+
 
                 if (len(selected_cores) >= self.args.n_cores and
                         len(selected_hubs_key) >= self.args.n_keys_hubs and
                         len(selected_hubs_top) >= self.args.n_top_hubs):
                     break
+
+
             selected_walks_list.append(selected_walks)
             selected_cores_list.append(selected_cores)
             selected_hubs_top_list.append(selected_hubs_top)
             selected_hubs_key_list.append(selected_hubs_key)
 
-        # print('\n\n')
-        # print(len(selected_walks_list))
-        # print(len(selected_cores_list))
-        # print(len(selected_hubs_top_list))
-        # print(len(selected_hubs_key_list))
-        # print('\n\n')
-        # print(selected_walks_list[0])
-        # print(selected_cores_list[0])
-        # print('\n\n')
 
         return [selected_walks_list, selected_cores_list, selected_hubs_top_list, selected_hubs_key_list]
 
@@ -341,26 +395,16 @@ class RandomWalkWithRestart:
             for i in range(0, len(main_list), chunk_size):
                 yield main_list[i:i + chunk_size]
 
-        # cores_scores contains the cos. sim. for each p and d in each walk
-        # print('walks selection started')
-        hubs_key = [[[] for _ in range(self.all_walks)] for _ in range(len(self.seeds))]
-        hubs_top = [[[] for _ in range(self.all_walks)] for _ in range(len(self.seeds))]
-        cores = [[[] for _ in range(self.all_walks)] for _ in range(len(self.seeds))]
         selected_seeds_cores = [[] for _ in range(len(self.seeds))]
         selected_seeds_hubs_top = [[] for _ in range(len(self.seeds))]
         selected_seeds_hubs_key = [[] for _ in range(len(self.seeds))]
 
         selected_seeds_walks = [[] for _ in range(len(self.seeds))]
-        walk_importance_score = [[] for _ in range(len(self.seeds))]  # keeps count of node distance!
         all_nodes = []
         # compute frequency
         for i, walk in enumerate(walks):
             all_nodes.extend(walk)
-        counts = Counter(all_nodes)
-        frequency_dict = dict(counts)
-        # group walks by seed
-        # print(f'total number of walks: {len(walks)}')
-        st = time.time()
+
         first_ind = [w[0] for w in walks]
         self.first_ind = first_ind
         self.walks = walks
@@ -373,21 +417,15 @@ class RandomWalkWithRestart:
         # print(len(sublists))
         # Number of processes (ideally should be equal to or less than the number of available CPU cores)
         num_processes = min(40, len(sublists))
-        st = time.time()
         # Use ProcessPoolExecutor for parallel processing
         with concurrent.futures.ProcessPoolExecutor(max_workers=num_processes) as executor:
             # Map the process_list function to each sublist
             results = list(executor.map(self.process_list, sublists))
 
-        end =time.time()
-        # print(f'time taken by multi: {end-st}')
-        res_concat = []
         j = 0
         # sono i risultati di ogni chunk
         for result in results:
             # qui è ogni chunk. Ogni chunk è formato da walks, cores, top, keys
-
-
             walk_list, core_list, hubtop_list, hubkey_list = result[0],result[1],result[2],result[3]
             for walk,core,hubtop,hubkey in zip(walk_list,core_list,hubtop_list,hubkey_list):
 
@@ -398,10 +436,7 @@ class RandomWalkWithRestart:
 
                 j += 1
 
-        # print(len(selected_seeds_walks))
-        # print(len(self.seeds))
-        # print(f'walks: {selected_seeds_walks[0]}')
-        # print(f'cores: {selected_seeds_cores[0]}')
+
         final_cores, final_hubs_key, final_hubs_top = [], [], []
         # now, I select the top-k elements basing on the similarity score with penalty
         selected_seeds_cores = [sorted(s, key=lambda x: x[1], reverse=True) for s in selected_seeds_cores]
@@ -410,25 +445,22 @@ class RandomWalkWithRestart:
 
             final_cores.append(
                 sorted(list({x[0]: x for x in reversed(s)}.values())[::-1], key=lambda p: (p[1], p[0]), reverse=True))
-            #if self.args.hetgnn:
-                #final_cores.append(s)
 
         selected_seeds_hubs_top = [sorted(s, key=lambda x: x[1], reverse=True) for s in selected_seeds_hubs_top]
         for i, s in enumerate(selected_seeds_hubs_top):
             final_hubs_top.append(
                 sorted(list({x[0]: x for x in reversed(s)}.values())[::-1], key=lambda p: (p[1], p[0]), reverse=True)[
                 :self.args.n_top_hubs])
-            #if self.args.hetgnn:
-            #    final_hubs_top.append(s[:self.args.n_top_hubs])
 
         selected_seeds_hubs_key = [sorted(s, key=lambda x: x[1], reverse=True) for s in selected_seeds_hubs_key]
         for i, s in enumerate(selected_seeds_hubs_key):
-
+            # print(s)
+            # print(sorted(list({x[0]: x for x in reversed(s)}.values())[::-1], key=lambda p: (p[1], p[0]), reverse=True)[
+            #     ::])
+            # print('\n\n')
             final_hubs_key.append(
                 sorted(list({x[0]: x for x in reversed(s)}.values())[::-1], key=lambda p: (p[1], p[0]), reverse=True)[
                 :self.args.n_keys_hubs])
-            #if self.args.hetgnn:
-             #   final_hubs_key.append(s[:self.args.n_keys_hubs])
 
 
 
@@ -602,6 +634,7 @@ class RandomWalkWithRestart:
         ret_cores = [[] for _ in range(len(self.seeds))]
         ret_net_cores = [[] for _ in range(len(self.seeds))]
         ret_tops = [[] for _ in range(len(self.seeds))]
+        ret_net_tops = [[] for _ in range(len(self.seeds))]
         ret_keys = [[] for _ in range(len(self.seeds))]
         ret_net_keys = [[] for _ in range(len(self.seeds))]
         vectors = []
@@ -636,11 +669,20 @@ class RandomWalkWithRestart:
 
             tops = sel_top[i]
             authors = [[seed, c[0], c[1], self.data['author'].mapping[c[0]],
+                        self.data['author'].x[self.data['author'].mapping[c[0]]]] for c in tops if
+                       self.is_author(c[0])]
+            authors_net = [[seed, c[0], c[1], self.data['author'].mapping[c[0]],
                         self.data['author'].net_x[self.data['author'].mapping[c[0]]]] for c in tops if
                        self.is_author(c[0])]
             venues = [[seed, c[0], c[1], self.data['venue'].mapping[c[0]],
+                       self.data['venue'].x[self.data['venue'].mapping[c[0]]]] for c in tops if self.is_venue(c[0])]
+            venues_net = [[seed, c[0], c[1], self.data['venue'].mapping[c[0]],
                        self.data['venue'].net_x[self.data['venue'].mapping[c[0]]]] for c in tops if self.is_venue(c[0])]
+
             organizations = [[seed, c[0], c[1], self.data['organization'].mapping[c[0]],
+                              self.data['organization'].x[self.data['organization'].mapping[c[0]]]] for c in tops if
+                             self.is_organization(c[0])]
+            organizations_net = [[seed, c[0], c[1], self.data['organization'].mapping[c[0]],
                               self.data['organization'].net_x[self.data['organization'].mapping[c[0]]]] for c in tops if
                              self.is_organization(c[0])]
 
@@ -704,63 +746,67 @@ class RandomWalkWithRestart:
 
             ret_keys[i] = topics + entities + keywords
             ret_net_keys[i] = topics_net + entities_net + keywords_net
+            if self.args.no_aug:
+                ret_keys[i] = keywords
+                ret_net_keys[i] = keywords_net
 
             ret_tops[i] = venues + organizations + authors
+            ret_net_tops[i] = venues_net + organizations_net + authors_net
 
-            if len(ret_cores[i]) < self.args.n_cores and len(ret_cores[i]) > 0:
+            if len(ret_cores[i]) < self.args.n_cores :
                 pad = self.args.n_cores - len(ret_cores[i])
                 for _ in range(pad):
-                    x = random.choice(ret_cores[i])
                     ret_cores[i].append([seed, 'pad', -1, -1, torch.zeros(self.args.core_dim)])
-                    # ret_cores[i].append(x)
 
             elif len(ret_cores[i]) == 0:
                 pad = self.args.n_cores
                 for _ in range(pad):
                     ret_cores[i].append(vectors[i])
 
-            if len(ret_net_cores[i]) < self.args.n_cores and len(ret_net_cores[i]) > 0:
+            if len(ret_net_cores[i]) < self.args.n_cores :
                 pad = self.args.n_cores - len(ret_net_cores[i])
                 for _ in range(pad):
-                    x = random.choice(ret_net_cores[i])
                     ret_net_cores[i].append([seed, 'pad', -1, -1, torch.zeros(self.args.top_dim)])
-                    # ret_cores[i].append(x)
 
             elif len(ret_net_cores[i]) == 0:
                 pad = self.args.n_cores
                 for _ in range(pad):
                     ret_net_cores[i].append(vectors_net[i])
 
-            if len(ret_tops[i]) < self.args.n_top_hubs and len(ret_tops[i]) > 0:
+            if len(ret_tops[i]) < self.args.n_top_hubs :
                 pad = self.args.n_top_hubs - len(ret_tops[i])
                 for _ in range(pad):
-                    x = random.choice(ret_tops[i])
-                    ret_tops[i].append([seed, 'pad', -1, -1, torch.zeros(self.args.top_dim)])
-                    # ret_tops[i].append(x)
+                    ret_tops[i].append([seed, 'pad', -1, -1, torch.zeros(self.args.key_dim)])
 
             elif len(ret_tops[i]) == 0:
                 pad = self.args.n_top_hubs
                 for _ in range(pad):
-                    ret_tops[i].append([seed, 'pad', -1, -1, torch.zeros(self.args.top_dim)])
-            #
-            if len(ret_keys[i]) < self.args.n_keys_hubs and len(ret_keys[i]) > 0:
+                    ret_tops[i].append([seed, 'pad', -1, -1, torch.zeros(self.args.key_dim)])
+
+            if len(ret_net_tops[i]) < self.args.n_top_hubs:
+                pad = self.args.n_top_hubs - len(ret_net_tops[i])
+                for _ in range(pad):
+                    ret_net_tops[i].append([seed, 'pad', -1, -1, torch.zeros(self.args.top_dim)])
+
+            elif len(ret_net_tops[i]) == 0:
+                pad = self.args.n_top_hubs
+                for _ in range(pad):
+                    ret_net_tops[i].append([seed, 'pad', -1, -1, torch.zeros(self.args.top_dim)])
+
+            if len(ret_keys[i]) < self.args.n_keys_hubs:
                 pad = self.args.n_keys_hubs - len(ret_keys[i])
                 for _ in range(pad):
-                    x = random.choice(ret_keys[i])
                     ret_keys[i].append([seed, 'pad', -1, -1, torch.zeros(self.args.key_dim)])
-                    # ret_keys[i].append(x)
 
             elif len(ret_keys[i]) == 0:
                 pad = self.args.n_keys_hubs
                 for _ in range(pad):
                     ret_keys[i].append([seed, 'pad', -1, -1, torch.zeros(self.args.key_dim)])
 
-            if len(ret_net_keys[i]) < self.args.n_keys_hubs and len(ret_net_keys[i]) > 0:
+            if len(ret_net_keys[i]) < self.args.n_keys_hubs :
                 pad = self.args.n_keys_hubs - len(ret_net_keys[i])
                 for _ in range(pad):
-                    x = random.choice(ret_net_keys[i])
                     ret_net_keys[i].append([seed, 'pad', -1, -1, torch.zeros(self.args.top_dim)])
-                    # ret_keys[i].append(x)
 
             elif len(ret_net_keys[i]) == 0:
                 pad = self.args.n_keys_hubs
@@ -768,41 +814,85 @@ class RandomWalkWithRestart:
                     ret_net_keys[i].append([seed, 'pad', -1, -1, torch.zeros(self.args.top_dim)])
 
 
-            ret_keys[i] = sorted(ret_keys[i], key=lambda x: x[1])
-            ret_net_keys[i] = sorted(ret_net_keys[i], key=lambda x: x[1])
-            ret_tops[i] = sorted(ret_tops[i], key=lambda x: x[1])
+            # ret_keys[i] = sorted(ret_keys[i], key=lambda x: x[1])
+            # ret_net_keys[i] = sorted(ret_net_keys[i], key=lambda x: x[1])
+            # ret_tops[i] = sorted(ret_tops[i], key=lambda x: x[1])
+            # ret_net_tops[i] = sorted(ret_net_tops[i], key=lambda x: x[1])
 
 
-        return vectors, vectors_net, ret_net_cores, ret_cores, ret_net_keys, ret_keys, ret_tops, publications_vectors, datasets_vectors, authors_vectors, entities_vectors, topics_vectors, keywords_vectors, venues_vectors, organizations_vectors
+        return vectors, vectors_net, ret_net_cores, ret_cores, ret_net_keys, ret_keys,ret_net_tops, ret_tops, publications_vectors, datasets_vectors, authors_vectors, entities_vectors, topics_vectors, keywords_vectors, venues_vectors, organizations_vectors
 
-# if __name__ == '__main__':
-#     found = False
-#     if found:
-#         args = get_args()
-#         print("------arguments-------")
-#         for k, v in vars(args).items():
-#             print(k + ': ' + str(v))
-#         # random.seed(args.seed)
-#         # np.random.seed(args.seed)
-#         # torch.manual_seed(args.seed)
-#         # torch.cuda.manual_seed_all(args.seed)
+
 #
-#         # seeds = pd.read_csv(f'datasets/mes/all/final/publications.csv')['id'].tolist()[0:2]
-#         # print(seeds)
-#         data = ScholarlyDataset(root='datasets/mes/split_transductive/train/')
-#         root = 'datasets/mes/split_transductive/train/'
-#         walker_obj = RandomWalkWithRestart(args,data[0],root)
-#         walks = walker_obj.create_random_walks()
-#         st = time.time()
-#         selected_seeds_walks,selected_seeds_cores,selected_seeds_hubs_key,selected_seeds_hubs_top = walker_obj.select_walks(walks)
-#         print(time.time()-st)
-#         for s in selected_seeds_cores:
-#             print(s)
-#         a = walker_obj.get_neighbours_vector(selected_seeds_cores,selected_seeds_hubs_key,selected_seeds_hubs_top)
+# if __name__ == '__main__':
+#      found = True
+#      if found:
+#          args = get_args()
+#          print("------arguments-------")
+#          for k, v in vars(args).items():
+#              print(k + ': ' + str(v))
+#
+#          data = ScholarlyDataset(root='datasets/mes/split_transductive/train/')
+#          root = 'datasets/mes/split_transductive/train/'
+#          walker_obj = RandomWalkWithRestart(args,data[0],root)
+#          g = open('files/paths.txt', 'w')
+#          f = open('files/stats.txt', 'w')
+#          z = open('files/cores.txt', 'w')
+#          sources = pd.read_csv(f'datasets/mes/split_transductive/train/pubdataedges_test_trans_kcore_2.csv')['source'].tolist()
+#          targets = pd.read_csv(f'datasets/mes/split_transductive/train/pubdataedges_test_trans_kcore_2.csv')['target'].tolist()
+#
+#          walks = walker_obj.create_random_walks(seeds_in=pd.read_csv(f'datasets/mes/split_transductive/train/pubdataedges_validation_trans_kcore_2.csv')['target'].tolist())
+#
+#
+#          selected_seeds_walks,selected_seeds_cores,selected_seeds_hubs_key,selected_seeds_hubs_top = walker_obj.select_walks_mp(walks)
+         # for i in range(len(selected_seeds_walks)):
+         #     if len(selected_seeds_cores[i]) < 5:
+         #         print(len(selected_seeds_cores[i]))
+         #     if len(selected_seeds_hubs_key[i]) < 5:
+         #         print(len(selected_seeds_hubs_key[i]))
+         #     if len(selected_seeds_hubs_top[i]) < 5:
+         #         print(len(selected_seeds_hubs_top[i]))
+         # walks = []
+         # for seed in selected_seeds_walks:
+         #     for walk in seed:
+         #         g.write(' '.join(walk)+'\n')
+         #         walks.append(walk)
+
+         # count_1000 = 0
+         #
+         # for source,target in zip(sources,targets):
+         #     distance = 1000
+         #     for walk in walks:
+         #         if (walk[0] == source and target in walk):
+         #             distance = walk.index(target)
+         #             if distance < walk.index(target):
+         #                 distnace = walk.index(target)
+         #
+         #     stri = source + ' ' +  target + ' ' + str(distance)
+         #     f.write(stri + '\n')
+         #     if distance == 1000:
+         #         count_1000 += 1
+         # for source,target in zip(targets,sources):
+         #     distance = 1000
+         #     for walk in walks:
+         #         if (walk[0] == source and target in walk):
+         #             distance = walk.index(target)
+         #             if distance < walk.index(target):
+         #                 distnace = walk.index(target)
+         #
+         #     stri = source + ' ' +  target + ' ' + str(distance)
+         #     f.write(stri + '\n')
+         #     if distance == 1000:
+         #         count_1000 += 1
+         # print('total_1000 ',count_1000)
+         # st = time.time()
+         # print(time.time()-st)
+         # for s in selected_seeds_cores:
+         #     #print(s)
+         #     z.write(str(s) + '\n')
+         #a = walker_obj.get_neighbours_vector(selected_seeds_cores,selected_seeds_hubs_key,selected_seeds_hubs_top)
 
 #     #
-
-
 
 
 

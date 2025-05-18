@@ -541,6 +541,78 @@ def random_negative_samples(edge_index, edge_label_index):
     new_edges = new_edges.t()
     return new_edges
 
+# 
+from sentence_transformers import SentenceTransformer
+random.seed(42)
+if __name__ == '__main__':
+
+    def load_embeddings(filename):
+        """Load embeddings from a file using pickle."""
+        with open(filename, 'rb') as f:
+            embeddings = pickle.load(f)
+        print(f"Embeddings loaded from {filename}")
+        return embeddings
+
+    #
+    # sentences = ''
+    #
+    # # 2. Calculate embeddings
+    # model = SentenceTransformer("all-MiniLM-L6-v2")
+    # embeddings = model.encode(sentences)
+    # print(type(embeddings))
+    train_dataset = ScholarlyDataset(root=f'datasets/mes/split_transductive/train/')
+    dataset = train_dataset[0]
+
+    sampled_indices = torch.randperm(dataset['dataset'].num_nodes)[:int(0.25 * dataset['dataset'].num_nodes)]
+    print(sampled_indices)
+    repeated_embeddings = load_embeddings("model/empty_embedding.pkl")
+
+    # print(type(repeated_embeddings))
+    # print(repeated_embeddings.shape)
+    repeated_embeddings = np.tile(repeated_embeddings, (len(sampled_indices), 1))
+    #print(repeated_embeddings.shape)
+    repeated_embeddings_tensor = torch.tensor(repeated_embeddings, dtype=torch.float)
+    dataset['dataset'].x[sampled_indices] = repeated_embeddings_tensor
+
+    print(dataset['dataset'].x[2219])
+    print(dataset['dataset'].x[7])
+    print(dataset['dataset'].x[7] == dataset['dataset'].x[2219])
+    #print(dataset['dataset'].x.shape)
+    dataset['dataset'].x[sampled_indices] = repeated_embeddings_tensor
+    print(dataset['dataset'].x[2219])
+    print(dataset['dataset'].x[7])
+    print(dataset['dataset'].x[7] == dataset['dataset'].x[2219])
+
+    # print(dataset['dataset'].x.shape)
+    #
+    # # Sostituire i valori di .x per i nodi campionati
+    # print(dataset['dataset'].x[sampled_indices].shape)
+    # print(dataset['dataset'].x.shape)
 
 
+#     def save_embeddings(embeddings, filename):
+#         """Save embeddings to a file using pickle."""
+#         with open(filename, 'wb') as f:
+#             pickle.dump(embeddings, f)
+#         print(f"Embeddings saved to {filename}")
+# 
+# 
 
+#     # 1. Load a pretrained Sentence Transformer model
+#     model = SentenceTransformer("all-MiniLM-L6-v2")
+# 
+#     # The sentences to encode
+#     sentences = ''
+# 
+#     # 2. Calculate embeddings
+#     embeddings = model.encode(sentences)
+#     print("Embeddings:", embeddings)
+# 
+#     # 3. Save the embeddings to a file
+#     save_embeddings(embeddings, "model/empty_embedding.pkl")
+# 
+#     # 4. Load the embeddings back
+#     loaded_embeddings = load_embeddings("model/empty_embedding.pkl")
+# 
+#     # Verify that the loaded embeddings match the original
+#     print("Are embeddings equal?", (embeddings == loaded_embeddings).all())

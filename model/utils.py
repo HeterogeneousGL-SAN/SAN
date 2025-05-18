@@ -63,7 +63,6 @@ class EarlyStoppingClass:
             self.best_epoch = epoch
             self.best_score = score
             self.save_checkpoint(val_loss, model,optimizer,epoch,best=True)
-            # self.save=True
             self.counter = 0
 
 
@@ -85,14 +84,13 @@ class EarlyStoppingClass:
 
         """Saves model when validation loss decrease."""
 
-        print(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
         # self.save_early_path = self.save_early_path.split('_epoch')[0]+'_epoch_'+str(epoch)+'.pt'
         if  best:
             path = self.save_early_path
         else:
             path = self.save_epoch_path
-            path_1 = self.save_epoch_path.replace('.pt','_epoch_') + str(epoch) + '.pt'
-        print(path)
+        print(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model {path}')
+
         torch.save({
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
@@ -101,9 +99,9 @@ class EarlyStoppingClass:
             'best_score': self.best_score,
             'counter': self.counter
         }, path)
-        torch.save(model.state_dict(), path)
-        if not best:
-            torch.save(model.state_dict(), path_1)
+        # torch.save(model.state_dict(), path)
+        # if not best:
+        #     torch.save(model.state_dict(), path)
         self.val_loss_min = val_loss
 
 

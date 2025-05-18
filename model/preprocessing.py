@@ -204,6 +204,6 @@ class Preprocessor:
 if __name__ == '__main__':
     args = args_list.get_args()
     preproc = Preprocessor(args)
-    preproc.create_core_nodes_embeddings()
-    preproc.create_hub_keys_embeddings()
+#     preproc.create_core_nodes_embeddings()
+#     preproc.create_hub_keys_embeddings()
     preproc.create_hub_top_embeddings()
